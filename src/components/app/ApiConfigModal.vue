@@ -1,5 +1,7 @@
 <script setup>
-defineProps({
+import { computed, ref } from 'vue';
+
+const props = defineProps({
   visible: {
     type: Boolean,
     default: false,
@@ -27,6 +29,37 @@ const emit = defineEmits([
   'reset',
   'save',
 ]);
+
+const showModelOptions = ref(false);
+
+const normalizedModelQuery = computed(() => props.apiConfigDraft.model.trim().toLowerCase());
+const filteredModelOptions = computed(() => {
+  const models = props.apiConfigDraft.availableModels || [];
+  const query = normalizedModelQuery.value;
+
+  if (!query) {
+    return models;
+  }
+
+  const matches = models.filter((model) => model.toLowerCase().includes(query));
+  const rest = models.filter((model) => !model.toLowerCase().includes(query));
+  return [...matches, ...rest];
+});
+
+function updateModel(value) {
+  emit('update-api-config', 'model', value);
+}
+
+function selectModel(model) {
+  updateModel(model);
+  showModelOptions.value = false;
+}
+
+function hideModelOptionsSoon() {
+  window.setTimeout(() => {
+    showModelOptions.value = false;
+  }, 120);
+}
 </script>
 
 <template>
@@ -75,15 +108,49 @@ const emit = defineEmits([
           <div>
             <label for="api-model-input">模型</label>
             <div class="inline-row">
-              <input
-                id="api-model-input"
-                :value="apiConfigDraft.model"
-                list="available-models"
-                type="text"
-                class="mono-input"
-                placeholder="deepseek-chat"
-                @input="emit('update-api-config', 'model', $event.target.value)"
-              />
+              <div class="model-combobox">
+                <input
+                  id="api-model-input"
+                  :value="apiConfigDraft.model"
+                  type="text"
+                  class="mono-input model-combobox-input"
+                  placeholder="deepseek-chat"
+                  role="combobox"
+                  autocomplete="off"
+                  aria-controls="available-models"
+                  :aria-expanded="showModelOptions && apiConfigDraft.availableModels.length > 0"
+                  @focus="showModelOptions = true"
+                  @click="showModelOptions = true"
+                  @blur="hideModelOptionsSoon"
+                  @input="updateModel($event.target.value); showModelOptions = true"
+                />
+                <button
+                  class="model-combobox-toggle"
+                  type="button"
+                  aria-label="展开模型列表"
+                  @mousedown.prevent="showModelOptions = !showModelOptions"
+                >
+                  ▾
+                </button>
+                <div
+                  v-if="showModelOptions && apiConfigDraft.availableModels.length"
+                  id="available-models"
+                  class="model-options"
+                  role="listbox"
+                >
+                  <button
+                    v-for="model in filteredModelOptions"
+                    :key="model"
+                    class="model-option"
+                    type="button"
+                    role="option"
+                    :aria-selected="model === apiConfigDraft.model"
+                    @mousedown.prevent="selectModel(model)"
+                  >
+                    {{ model }}
+                  </button>
+                </div>
+              </div>
               <button
                 class="btn btn-secondary btn-sm"
                 type="button"
@@ -93,9 +160,6 @@ const emit = defineEmits([
                 {{ modelFetchLoading ? '拉取中...' : '拉取模型' }}
               </button>
             </div>
-            <datalist id="available-models">
-              <option v-for="model in apiConfigDraft.availableModels" :key="model" :value="model" />
-            </datalist>
             <p class="helper-text">
               已缓存 {{ apiConfigDraft.availableModels.length }} 个模型；
               当前生成会使用 <strong>{{ apiConfigDraft.model || '未填写模型' }}</strong>。

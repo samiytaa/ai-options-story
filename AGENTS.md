@@ -1,4 +1,4 @@
-# Agent Notes
+使用简体中文和用户沟通
 
 ## Project Navigation
 
@@ -47,5 +47,17 @@ PATCH
 - `state.brainhole` and `state.selectedBrainholeIndex` represent the current chosen brainhole.
 - `clearBrainholeContinuation()` clears downstream generated content, so do not call it for append-style operations.
 - After changing brainhole candidates, refresh the workspace using the same local patterns already used by the flow code.
+- Brainhole output quality rules should be enforced in layers: default prompt text in `src/prompts.js`, runtime guards in `src/app/promptConfig.js`, and parser/display fallbacks in `src/app/brainholeOptions.js` plus related UI styles.
+- Prompt config edits are database-backed: track dirty prompt IDs, flush pending saves before closing/resetting, and bump the prompt editor version after reset so contenteditable prompt fields re-render from backend defaults.
+- `state.customPromptInstruction` is the per-project, editor-area extra instruction. Append it at runtime to middle-flow generation prompts only; keep persistent default prompt edits in `src/prompts.js`/prompt config instead.
+- For API model selection in `ApiConfigModal.vue`, keep manual model entry available and avoid native `datalist` for fetched model lists; browser rendering can hide most cached options.
+- Edit/add dialogs that mutate the active project snapshot should explicitly call `saveCurrentProjectSnapshot()` after a successful local state change, instead of relying only on the delayed deep watcher.
+- Editor-area actions that mutate story state, story blocks, wind-vane files, generated choices, or reset state should also flush `saveCurrentProjectSnapshot()` when the action completes.
+- Generated guide/plot block presentation lives in `StoryStageWorkspace.vue`; keep display-only helpers such as word counts local to that component unless other views need the same behavior.
 
-每次执行后迭代沉淀相关指导文件
+## Knowledge Capture
+
+- After each change, update the smallest relevant doc only when the work teaches a reusable rule.
+- Put product-facing feature behavior, workflow descriptions, and user-visible capability changes in `README.md`.
+- Put agent navigation, editing cautions, verification commands, and cross-cutting implementation guardrails in `AGENTS.md`.
+- Do not add one-off feature changelog entries to `AGENTS.md`; keep it short enough to scan before editing.

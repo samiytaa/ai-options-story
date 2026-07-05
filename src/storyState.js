@@ -29,6 +29,7 @@ export function createInitialState(aiConfig) {
     bigHookChosen: null,
     finalStyle: '',
     finalWork: '',
+    customPromptInstruction: '',
     stage: 'setup',
     plotPointContents: [],
   };

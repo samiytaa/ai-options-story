@@ -18,11 +18,24 @@ export function normalizeScore(value, fallback = 8) {
   return Math.min(10, Math.max(0, Math.round(number)));
 }
 
+export function normalizeBrainholeIdeaText(value) {
+  return String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .flatMap((line) => line
+      .trim()
+      .replace(/([。！？!?]|\.{3,}|…{1,2})(?=\S)/g, '$1\n')
+      .split('\n'))
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
 export function normalizeBrainholeOption(option = {}, index = 0) {
   const scores = option.scores || {};
   return {
     title: String(option.title || `脑洞 ${index + 1}`).trim(),
-    idea: String(option.idea || option.brainhole || '').trim(),
+    idea: normalizeBrainholeIdeaText(option.idea || option.brainhole),
     fit: String(option.fit || option.matchReason || '').trim(),
     scores: {
       freshness: normalizeScore(scores.freshness ?? option.freshness),
@@ -97,11 +110,11 @@ export function extractJsonPayload(text) {
   return trimmed;
 }
 
-export function parseBrainholeOptions(result) {
+export function parseBrainholeOptions(result, startIndex = 0) {
   const payload = JSON.parse(extractJsonPayload(result));
   const options = Array.isArray(payload?.options) ? payload.options : [];
   const normalized = options
-    .map((option, index) => normalizeBrainholeOption(option, index))
+    .map((option, index) => normalizeBrainholeOption(option, startIndex + index))
     .filter((option) => option.idea);
 
   if (normalized.length < 5) {

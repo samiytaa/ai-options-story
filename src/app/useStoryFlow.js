@@ -43,6 +43,7 @@ export function useStoryFlow(deps) {
     storyBlocks,
     selectedChoiceIndex,
     styleInput,
+    customPromptInstruction,
     copySelectedChoicesWithBody,
     selectedChoiceCopyText,
     windVaneFile,
@@ -99,6 +100,22 @@ export function useStoryFlow(deps) {
     setValue(pendingPlotGenerationAvailable, Boolean(value));
   }
 
+  function cancelCurrentChoiceSelection(type) {
+    if (type === 'option' && pendingPlotGeneration?.undoSelection) {
+      const undo = pendingPlotGeneration.undoSelection;
+      const chapter = ensureChapter(state);
+
+      if (chapter.plotPoints.length === undo.chapterPlotPointCount) {
+        chapter.plotPoints.pop();
+      }
+      state.currentPlotPointIndex = undo.currentPlotPointIndex;
+      setPendingPlotGeneration(null);
+    }
+
+    clearChoiceSelection();
+    notify('已取消选中', 'info');
+  }
+
   function getPromptConfig(id) {
     if (injectedGetPromptConfig) return injectedGetPromptConfig(id);
     return getPromptConfigFromList(promptConfigs, id);
@@ -107,6 +124,20 @@ export function useStoryFlow(deps) {
   function buildPromptMessages(id, values) {
     if (injectedBuildPromptMessages) return injectedBuildPromptMessages(id, values);
     return buildPromptMessagesFromConfig(promptConfigs, id, values);
+  }
+
+  function buildPromptMessagesWithCustomInstruction(id, values) {
+    const messages = buildPromptMessages(id, values);
+    const instruction = getValue(customPromptInstruction)?.trim();
+    if (!instruction) return messages;
+
+    return messages.map((message, index) => {
+      if (index !== messages.length - 1 || message.role !== 'user') return message;
+      return {
+        ...message,
+        content: `${message.content}\n\n【本次额外生成要求】\n${instruction}`,
+      };
+    });
   }
 
   async function requestAi(messages, temperature = 0.85) {
@@ -428,6 +459,22 @@ export function useStoryFlow(deps) {
       .map((item) => item.content);
   }
 
+  function getLatestPlotIndexForChapter(chapterNum) {
+    return getValue(storyBlocks).reduce((latest, block) => {
+      const plotRef = parsePlotBlockId(block.id);
+      if (!plotRef || plotRef.chapterNum !== chapterNum || !block.content) return latest;
+      return Math.max(latest, plotRef.plotIndex);
+    }, 0);
+  }
+
+  function syncCurrentPlotPointerFromBlocks() {
+    const latestPlotIndex = getLatestPlotIndexForChapter(state.currentChapter);
+    if (!latestPlotIndex) return;
+
+    state.plotPointContents = getPlotContentsForChapter(state.currentChapter);
+    state.currentPlotPointIndex = latestPlotIndex - 1;
+  }
+
   function clearFinalAssembly() {
     state.bigHooks = [];
     state.bigHookChosen = null;
@@ -574,10 +621,16 @@ export function useStoryFlow(deps) {
         promptConfig.temperature,
       );
 
-      state.brainholeOptions = parseBrainholeOptions(result);
-      clearBrainholeContinuation();
+      const previousOptionCount = state.brainholeOptions.length;
+      const generatedOptions = parseBrainholeOptions(result, previousOptionCount);
+      if (previousOptionCount) {
+        state.brainholeOptions.push(...generatedOptions);
+      } else {
+        state.brainholeOptions = generatedOptions;
+        clearBrainholeContinuation();
+      }
       setBrainholeOptionsBlock();
-      notify('脑洞选项生成成功！', 'success');
+      notify(previousOptionCount ? '新脑洞已追加到候选末尾！' : '脑洞选项生成成功！', 'success');
     } catch (error) {
       setStage('setup');
       notify(`生成脑洞失败：${error.message}`, 'error');
@@ -600,7 +653,7 @@ export function useStoryFlow(deps) {
     try {
       const promptConfig = getPromptConfig('guideAndFirstPlot');
       const result = await requestAi(
-        buildPromptMessages('guideAndFirstPlot', {
+        buildPromptMessagesWithCustomInstruction('guideAndFirstPlot', {
           contextSummary: buildContextSummary(state),
         }),
         promptConfig.temperature,
@@ -644,6 +697,7 @@ export function useStoryFlow(deps) {
   async function generateOptionsForCurrentPlotPoint() {
     updateLoading('正在生成剧情选项...');
     clearChoiceSelection();
+    syncCurrentPlotPointerFromBlocks();
 
     try {
       const currentPlotDesc = state.plotPointContents[state.currentPlotPointIndex] || '';
@@ -651,7 +705,7 @@ export function useStoryFlow(deps) {
       const plotIndex = state.currentPlotPointIndex + 1;
       const promptConfig = getPromptConfig('options');
       const result = await requestAi(
-        buildPromptMessages('options', {
+        buildPromptMessagesWithCustomInstruction('options', {
           chapterNum,
           plotIndex,
           contextSummary: buildContextSummary(state),
@@ -672,7 +726,7 @@ export function useStoryFlow(deps) {
   async function requestNextPlotPointText(chosenOptionText, chapterNum, plotIndex) {
     const promptConfig = getPromptConfig('nextPlotPoint');
     return requestAi(
-      buildPromptMessages('nextPlotPoint', {
+      buildPromptMessagesWithCustomInstruction('nextPlotPoint', {
         chosenOptionText,
         chapterNum,
         plotIndex,
@@ -684,13 +738,15 @@ export function useStoryFlow(deps) {
 
   async function generateNextPlotPoint(chosenOptionText, sourceChoice = null) {
     updateLoading('正在生成下一个剧情点...');
+    syncCurrentPlotPointerFromBlocks();
 
     try {
       const chapterNum = state.currentChapter;
-      const plotIndex = state.currentPlotPointIndex + 1;
+      const plotIndex = getLatestPlotIndexForChapter(chapterNum) + 1;
       const result = await requestNextPlotPointText(chosenOptionText, chapterNum, plotIndex);
 
-      state.plotPointContents.push(result);
+      state.currentPlotPointIndex = plotIndex - 1;
+      state.plotPointContents[plotIndex - 1] = result;
       appendPlotBlock(chapterNum, plotIndex, result, sourceChoice);
       state.currentOptions = [];
       setPendingPlotGeneration(null);
@@ -715,7 +771,7 @@ export function useStoryFlow(deps) {
       const chapterNum = state.currentChapter;
       const promptConfig = getPromptConfig('hooks');
       const result = await requestAi(
-        buildPromptMessages('hooks', {
+        buildPromptMessagesWithCustomInstruction('hooks', {
           chapterNum,
           contextSummary: buildContextSummary(state),
           chapterFourHookNote: chapterNum >= 4 ? '4. 这是第四章的钩子，需要更强的冲击力，为大钩子做铺垫。' : '',
@@ -742,7 +798,7 @@ export function useStoryFlow(deps) {
     try {
       const promptConfig = getPromptConfig('bigHooks');
       const result = await requestAi(
-        buildPromptMessages('bigHooks', {
+        buildPromptMessagesWithCustomInstruction('bigHooks', {
           contextSummary: buildContextSummary(state),
         }),
         promptConfig.temperature,
@@ -761,13 +817,20 @@ export function useStoryFlow(deps) {
     if (getValue(isLoading)) return;
     if (!hasActiveProject()) return;
 
+    if (getValue(selectedChoiceIndex) === index) {
+      cancelCurrentChoiceSelection(type);
+      return;
+    }
+
     setValue(selectedChoiceIndex, index);
 
     if (type === 'option') {
+      syncCurrentPlotPointerFromBlocks();
       const chosenOption = state.currentOptions[index];
       const chosenOptionText = formatChoiceForPrompt(chosenOption);
       const currentPlotDesc = state.plotPointContents[state.currentPlotPointIndex] || '';
       const chapter = ensureChapter(state);
+      const previousPlotPointIndex = state.currentPlotPointIndex;
       const sourceChoice = {
         type,
         label: `选项 ${index + 1}`,
@@ -785,12 +848,7 @@ export function useStoryFlow(deps) {
         appendChoiceRecordBlock(`choice-record-ch${state.currentChapter}-plot4`, sourceChoice);
         state.currentOptions = [];
         clearChoiceSelection();
-        if (automationEnabled('autoGenerateChoices')) {
-          notify('本章4个剧情点已完成，正在生成章节钩子...', 'info');
-          await generateHooks();
-        } else {
-          notify('本章4个剧情点已完成，自动生成选项已关闭', 'info');
-        }
+        notify('本章4个剧情点已完成，请生成下一章的4个章节钩子', 'info');
         return;
       }
 
@@ -798,7 +856,14 @@ export function useStoryFlow(deps) {
       if (automationEnabled('autoGeneratePlot')) {
         await generateNextPlotPoint(chosenOptionText, sourceChoice);
       } else {
-        setPendingPlotGeneration({ chosenOptionText, sourceChoice });
+        setPendingPlotGeneration({
+          chosenOptionText,
+          sourceChoice,
+          undoSelection: {
+            currentPlotPointIndex: previousPlotPointIndex,
+            chapterPlotPointCount: chapter.plotPoints.length,
+          },
+        });
         notify('已记录选项，自动生成剧情已关闭', 'info');
       }
       return;
@@ -937,7 +1002,7 @@ export function useStoryFlow(deps) {
       syncEditedBlockToState(block.id, result);
 
       if (plotRef.plotIndex >= 4) {
-        await generateHooks();
+        notify('第4个剧情点已重新生成，请生成下一章的4个章节钩子', 'info');
       } else {
         if (automationEnabled('autoGenerateChoices')) {
           await generateOptionsForCurrentPlotPoint();

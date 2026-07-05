@@ -150,6 +150,10 @@ function secondaryLabelForType(type) {
 function optionCardKey(option, index) {
   return `${props.type}-${index}-${props.type === 'option' ? formatChoiceForDisplay(option) : formatHookForDisplay(option, props.type)}`;
 }
+
+function selectButtonText(index) {
+  return props.selectedIndex === index ? '取消选中' : '选择';
+}
 </script>
 
 <template>
@@ -204,10 +208,10 @@ function optionCardKey(option, index) {
             <button
               class="btn btn-primary btn-sm"
               type="button"
-              :disabled="disabled || selectedIndex !== null"
+              :disabled="disabled || (selectedIndex !== null && selectedIndex !== index)"
               @click="emit('select', index, type)"
             >
-              选择
+              {{ selectButtonText(index) }}
             </button>
             <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="startEdit(index, option)">
               修改
@@ -254,14 +258,6 @@ function optionCardKey(option, index) {
             @click="currentViewIndex = index"
           ></span>
         </div>
-        <div class="carousel-center-actions">
-          <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="emit('regenerate', type)">
-            {{ regenerateText() }}
-          </button>
-          <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="openAddOptionModal">
-            添加{{ labelForType(type) }}
-          </button>
-        </div>
       </div>
 
       <button
@@ -284,6 +280,18 @@ function optionCardKey(option, index) {
         <p class="selected-choice-option">{{ primaryLabelForType(type) }}：{{ hookParts(options[selectedIndex], selectedIndex).hook }}</p>
         <p class="selected-choice-result-text">剧情走向：{{ hookParts(options[selectedIndex], selectedIndex).direction }}</p>
       </template>
+    </div>
+
+    <div v-else class="choice-regenerate-panel">
+      <div class="choice-regenerate-actions">
+        <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="emit('regenerate', type)">
+          {{ regenerateText() }}
+        </button>
+        <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="openAddOptionModal">
+          添加{{ labelForType(type) }}
+        </button>
+      </div>
+      <slot name="after-regenerate" />
     </div>
 
     <div v-if="showAddOptionModal" class="modal-backdrop choice-add-backdrop" @click.self="closeAddOptionModal">

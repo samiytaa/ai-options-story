@@ -63,10 +63,25 @@ export function renderPrompt(template, values = {}) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => values[key] ?? '');
 }
 
+const BRAINHOLE_RUNTIME_GUARD = `
+
+【脑洞生成硬性补充要求】
+1. options[*].idea 必须严格一句一行；每个句号、问号、叹号、省略号或明显语义停顿后都要换行。
+2. 风向标只用于提炼趋势方向，禁止照抄、改写或近似复刻其中的示例。
+3. 不要做换皮脑洞：不能只替换示例里的人名、身份、地点、道具、关系或核心反转。
+4. 如果某个脑洞和风向标示例太像，必须重新发散到新的角色处境、冲突机制和反转落点。
+`;
+
+function appendRuntimeGuard(id, userPrompt) {
+  if (id !== 'brainhole') return userPrompt;
+  return `${userPrompt}${BRAINHOLE_RUNTIME_GUARD}`;
+}
+
 export function buildPromptMessages(promptConfigs, id, values) {
   const config = getPromptConfig(promptConfigs, id);
+  const userPrompt = appendRuntimeGuard(id, renderPrompt(config.userPrompt, values).trim());
   return [
     { role: 'system', content: renderPrompt(config.systemPrompt, values).trim() },
-    { role: 'user', content: renderPrompt(config.userPrompt, values).trim() },
+    { role: 'user', content: userPrompt },
   ];
 }

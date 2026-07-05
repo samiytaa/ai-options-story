@@ -112,6 +112,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  customPromptInstruction: {
+    type: String,
+    default: '',
+  },
   quickStyles: {
     type: Array,
     default: () => [],
@@ -167,6 +171,7 @@ const emit = defineEmits([
   'delete-current-choice-option',
   'favorite-current-choice',
   'update:styleInput',
+  'update:customPromptInstruction',
   'final-writing',
   'copy-final-work',
   'download-final-work',
@@ -192,6 +197,10 @@ function updateStoryStart(event) {
 
 function updateStyleInput(event) {
   emit('update:styleInput', event.target.value);
+}
+
+function updateCustomPromptInstruction(event) {
+  emit('update:customPromptInstruction', event.target.value);
 }
 
 function setQuickStyle(style) {
@@ -231,6 +240,10 @@ function splitStoryParagraphs(text) {
     .split(/\r?\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function countStoryCharacters(text) {
+  return String(text || '').replace(/\s/g, '').length;
 }
 </script>
 
@@ -393,6 +406,7 @@ function splitStoryParagraphs(text) {
               {{ paragraph }}
             </p>
           </div>
+          <span class="story-word-count">{{ countStoryCharacters(block.content) }} 字</span>
         </button>
       </template>
     </div>
@@ -402,6 +416,17 @@ function splitStoryParagraphs(text) {
     <button class="btn btn-primary" type="button" :disabled="isLoading" @click="emit('generate-guide-and-first-plot')">
       生成导语 & 第一个剧情点
     </button>
+    <section class="custom-prompt-panel" aria-label="本次额外生成要求">
+      <label for="custom-prompt-instruction-guide">本次额外要求</label>
+      <textarea
+        id="custom-prompt-instruction-guide"
+        :value="customPromptInstruction"
+        rows="3"
+        placeholder="例如：让主角主动冒险、增加误会冲突、走向更悬疑但不要死人。会追加到当前生成按钮的提示词后。"
+        :disabled="isLoading"
+        @input="updateCustomPromptInstruction"
+      />
+    </section>
     <button class="manual-brainhole-add-card manual-brainhole-add-card-bottom" type="button" :disabled="isLoading"
       @click="emit('open-manual-brainhole-modal')">
       <span class="manual-brainhole-add-plus">+</span>
@@ -424,19 +449,55 @@ function splitStoryParagraphs(text) {
       @add-option="forwardAddOption"
       @delete-option="forwardDeleteOption"
       @favorite="forwardFavorite"
-    />
+    >
+      <template #after-regenerate>
+        <section class="custom-prompt-panel custom-prompt-panel-compact" aria-label="本次额外生成要求">
+          <label for="custom-prompt-instruction-regenerate">本次额外要求</label>
+          <textarea
+            id="custom-prompt-instruction-regenerate"
+            :value="customPromptInstruction"
+            rows="3"
+            placeholder="例如：重新生成时让选项更有差异、结果更尖锐、走向更贴近你想要的方向。"
+            :disabled="isLoading"
+            @input="updateCustomPromptInstruction"
+          />
+        </section>
+      </template>
+    </ChoiceList>
   </div>
 
   <div v-if="pendingPlotGenerationAvailable" class="action-panel">
     <button class="btn btn-primary" type="button" :disabled="isLoading" @click="emit('continue-pending-plot-generation')">
       生成下一段剧情
     </button>
+    <section class="custom-prompt-panel" aria-label="本次额外生成要求">
+      <label for="custom-prompt-instruction-plot">本次额外要求</label>
+      <textarea
+        id="custom-prompt-instruction-plot"
+        :value="customPromptInstruction"
+        rows="3"
+        placeholder="例如：让下一段更偏感情拉扯、加重代价、不要立刻揭晓真相。会追加到当前生成按钮的提示词后。"
+        :disabled="isLoading"
+        @input="updateCustomPromptInstruction"
+      />
+    </section>
   </div>
 
   <div v-if="pendingChoiceGenerationAvailable" class="action-panel">
     <button class="btn btn-secondary" type="button" :disabled="isLoading" @click="emit('generate-pending-choices')">
       {{ pendingChoiceGenerationLabel }}
     </button>
+    <section class="custom-prompt-panel" aria-label="本次额外生成要求">
+      <label for="custom-prompt-instruction-choice">本次额外要求</label>
+      <textarea
+        id="custom-prompt-instruction-choice"
+        :value="customPromptInstruction"
+        rows="3"
+        placeholder="例如：给出更激进/更保守/更反转的走向，选项之间差异要更大。会追加到当前生成按钮的提示词后。"
+        :disabled="isLoading"
+        @input="updateCustomPromptInstruction"
+      />
+    </section>
   </div>
 
   <div v-if="showStylePanel" class="style-panel">

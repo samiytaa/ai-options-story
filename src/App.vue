@@ -105,6 +105,7 @@ const copySelectedChoicesWithBody = ref(false);
 const showPromptModal = ref(false);
 const activePromptId = ref('brainhole');
 const promptConfigs = reactive(loadBrowserPromptConfigs());
+const promptEditorVersion = ref(0);
 const promptAutomationSettings = reactive(loadPromptAutomationSettings());
 const windVaneFile = ref(null);
 const uploadInputRef = ref(null);
@@ -150,10 +151,24 @@ const selectedStoryBlockTitle = computed(() => {
   return block.title || '当前片段';
 });
 const canUseAssistant = computed(() => Boolean(selectedStoryBlock.value?.content && state.aiConfig.apiKey && !assistantLoading.value));
+function completedPlotBlockCountForChapter(chapterNum) {
+  return storyBlocks.value.filter((block) => {
+    const match = String(block.id || '').match(/^plot-(\d+)-(\d+)$/);
+    return match && Number(match[1]) === chapterNum && block.content;
+  }).length;
+}
+
+function hasLatestPlotBlockContentForChapter(chapterNum) {
+  return storyBlocks.value.some((block) => {
+    const match = String(block.id || '').match(/^plot-(\d+)-(\d+)$/);
+    return match && Number(match[1]) === chapterNum && block.content;
+  });
+}
+
 const pendingChoiceGenerationLabel = computed(() => {
   const chapter = state.chapters.find((item) => item.chapterNum === state.currentChapter);
   if (state.currentChapter >= 4 && chapter?.hookChosen !== null && !state.bigHooks.length) return '生成大钩子与剧情走向';
-  if ((chapter?.plotPoints?.length || 0) >= 4 && !state.currentHooks.length) return '生成章节钩子与剧情走向';
+  if (completedPlotBlockCountForChapter(state.currentChapter) >= 4 && !state.currentHooks.length) return '生成下一章的4个章节钩子';
   return '生成剧情选项';
 });
 const pendingChoiceGenerationAvailable = computed(() => {
@@ -163,8 +178,8 @@ const pendingChoiceGenerationAvailable = computed(() => {
 
   const chapter = state.chapters.find((item) => item.chapterNum === state.currentChapter);
   if (state.currentChapter >= 4 && chapter?.hookChosen !== null) return true;
-  if ((chapter?.plotPoints?.length || 0) >= 4 && chapter?.hookChosen === null) return true;
-  return Boolean(state.plotPointContents[state.currentPlotPointIndex]);
+  if (completedPlotBlockCountForChapter(state.currentChapter) >= 4 && chapter?.hookChosen === null) return true;
+  return hasLatestPlotBlockContentForChapter(state.currentChapter);
 });
 
 function startEditProjectName(project) {
@@ -255,12 +270,13 @@ function clearCurrentApiConfig() {
   pushToast('API 配置已恢复默认', 'success');
 }
 
-function clearBrainholeInput() {
+async function clearBrainholeInput() {
   state.storyStart = '';
+  await saveCurrentProjectSnapshot();
   pushToast('脑洞输入已清空', 'info');
 }
 
-function clearBrainholeOptions() {
+async function clearBrainholeOptions() {
   if (!projectLibrary.requireActiveProject()) return;
   if (!state.brainholeOptions.length) {
     pushToast('当前没有可清空的脑洞选项', 'info');
@@ -280,6 +296,7 @@ function clearBrainholeOptions() {
   setBrainholeOptionsBlock();
   updateStage('brainhole');
   activeStageView.value = 'brainhole';
+  await saveCurrentProjectSnapshot();
   pushToast('脑洞选项已清空', 'success');
 }
 
@@ -451,7 +468,7 @@ function favoriteCurrentChoice(option, index) {
   });
 }
 
-function chooseFavoriteBrainhole(item) {
+async function chooseFavoriteBrainhole(item) {
   if (item?.type !== 'brainhole') return;
   if (!requireActiveProject()) return;
   if (state.brainhole || state.guide) {
@@ -477,6 +494,7 @@ function chooseFavoriteBrainhole(item) {
   updateStage('brainhole');
   showFavoritesModal.value = false;
   isEditorOpen.value = true;
+  await saveCurrentProjectSnapshot();
   pushToast('已从收藏选定脑洞，并输出到编辑区', 'success');
 }
 
@@ -513,13 +531,14 @@ async function appendFavoriteBrainhole(item) {
   pushToast(shouldCreateFirstBrainhole ? '已创建第 1 条脑洞，并输出到编辑区' : '已追加到脑洞候选末尾', 'success');
 }
 
-function confirmReset() {
+async function confirmReset() {
   if (window.confirm('确定要重置全部内容吗？这将清除所有创作进度。')) {
-    resetAll();
+    await resetAll();
   }
 }
 
 const promptConfigSaveTimers = new Map();
+const dirtyPromptConfigIds = new Set();
 const PROMPT_CONFIG_SAVE_DELAY = 1000;
 
 function clearPendingPromptConfigSaves() {
@@ -527,18 +546,37 @@ function clearPendingPromptConfigSaves() {
   promptConfigSaveTimers.clear();
 }
 
+async function savePromptConfigToBackend(promptId) {
+  const promptConfig = getPromptConfig(promptId);
+  if (!promptConfig) return;
+
+  await updatePromptConfigRecord(promptId, {
+    systemPrompt: promptConfig.systemPrompt,
+    userPrompt: promptConfig.userPrompt,
+    temperature: promptConfig.temperature,
+  });
+  dirtyPromptConfigIds.delete(promptId);
+}
+
+async function flushPendingPromptConfigSaves() {
+  const promptIds = Array.from(dirtyPromptConfigIds);
+  clearPendingPromptConfigSaves();
+  if (!promptIds.length) return;
+
+  try {
+    await Promise.all(promptIds.map((promptId) => savePromptConfigToBackend(promptId)));
+  } catch (error) {
+    pushToast(`提示词保存失败：${error.message}`, 'error');
+    throw error;
+  }
+}
+
 function schedulePromptConfigSave(promptId) {
+  dirtyPromptConfigIds.add(promptId);
   window.clearTimeout(promptConfigSaveTimers.get(promptId));
   promptConfigSaveTimers.set(promptId, window.setTimeout(async () => {
-    const promptConfig = getPromptConfig(promptId);
-    if (!promptConfig) return;
-
     try {
-      await updatePromptConfigRecord(promptId, {
-        systemPrompt: promptConfig.systemPrompt,
-        userPrompt: promptConfig.userPrompt,
-        temperature: promptConfig.temperature,
-      });
+      await savePromptConfigToBackend(promptId);
     } catch (error) {
       pushToast(`提示词自动保存失败：${error.message}`, 'error');
     } finally {
@@ -548,17 +586,24 @@ function schedulePromptConfigSave(promptId) {
 }
 
 async function resetPromptConfigs() {
-  clearPendingPromptConfigSaves();
   try {
+    await flushPendingPromptConfigSaves();
     const nextPromptConfigs = await resetPromptConfigRecords();
     applyPromptConfigs(promptConfigs, nextPromptConfigs);
+    dirtyPromptConfigIds.clear();
+    promptEditorVersion.value += 1;
     pushToast('已恢复默认提示词', 'info');
   } catch (error) {
     pushToast(`恢复默认提示词失败：${error.message}`, 'error');
   }
 }
 
-function requestClosePromptModal() {
+async function requestClosePromptModal() {
+  try {
+    await flushPendingPromptConfigSaves();
+  } catch {
+    return;
+  }
   showPromptModal.value = false;
 }
 
@@ -595,6 +640,14 @@ const storyFlow = useStoryFlow({
   storyBlocks,
   selectedChoiceIndex,
   styleInput,
+  customPromptInstruction: {
+    get value() {
+      return state.customPromptInstruction;
+    },
+    set value(nextValue) {
+      state.customPromptInstruction = nextValue;
+    },
+  },
   copySelectedChoicesWithBody,
   selectedChoiceCopyText,
   windVaneFile,
@@ -627,39 +680,89 @@ const {
   unselectBrainholeOption,
   startEditBrainholeOption,
   cancelEditBrainholeOption,
-  saveBrainholeOption,
-  deleteBrainholeOption,
+  saveBrainholeOption: saveBrainholeOptionToState,
+  deleteBrainholeOption: deleteBrainholeOptionFromState,
   openManualBrainholeModal,
   cancelManualBrainholeModal,
   updateManualBrainholeDraftField,
-  addManualBrainholeOption,
+  addManualBrainholeOption: addManualBrainholeOptionToState,
   parsePlotBlockId,
   updateStoryBlockContent,
   startEditBlock,
   cancelEditBlock,
   syncEditedBlockToState,
-  saveEditBlock,
+  saveEditBlock: saveEditBlockToState,
   isPlotBlock,
   isLatestRegeneratablePlotBlock,
-  deletePlotBlock,
-  generateBrainhole,
-  generateGuideAndFirstPlot,
-  generateOptionsForCurrentPlotPoint,
-  generateHooks,
-  generateBigHooks,
-  handleChoiceSelect,
-  updateCurrentChoiceOption,
-  addCurrentChoiceOption,
-  deleteCurrentChoiceOption,
-  regeneratePlotBlockResult,
-  regenerateCurrentChoices,
-  continuePendingPlotGeneration,
-  finalWriting,
+  deletePlotBlock: deletePlotBlockFromState,
+  generateBrainhole: generateBrainholeToState,
+  generateGuideAndFirstPlot: generateGuideAndFirstPlotToState,
+  generateOptionsForCurrentPlotPoint: generateOptionsForCurrentPlotPointToState,
+  generateHooks: generateHooksToState,
+  generateBigHooks: generateBigHooksToState,
+  handleChoiceSelect: handleChoiceSelectInState,
+  updateCurrentChoiceOption: updateCurrentChoiceOptionInState,
+  addCurrentChoiceOption: addCurrentChoiceOptionToState,
+  deleteCurrentChoiceOption: deleteCurrentChoiceOptionFromState,
+  regeneratePlotBlockResult: regeneratePlotBlockResultToState,
+  regenerateCurrentChoices: regenerateCurrentChoicesToState,
+  continuePendingPlotGeneration: continuePendingPlotGenerationToState,
+  finalWriting: finalWritingToState,
   copyFinalWork,
   copyFinalBodyFromSidebar,
   downloadFinalWork,
-  resetAll,
+  resetAll: resetAllToState,
 } = storyFlow;
+
+async function persistProjectEditAfter(action) {
+  await action();
+  await saveCurrentProjectSnapshot();
+}
+
+async function generateBrainhole() {
+  await persistProjectEditAfter(generateBrainholeToState);
+}
+
+async function generateGuideAndFirstPlot() {
+  await persistProjectEditAfter(generateGuideAndFirstPlotToState);
+}
+
+async function generateOptionsForCurrentPlotPoint() {
+  await persistProjectEditAfter(generateOptionsForCurrentPlotPointToState);
+}
+
+async function generateHooks() {
+  await persistProjectEditAfter(generateHooksToState);
+}
+
+async function generateBigHooks() {
+  await persistProjectEditAfter(generateBigHooksToState);
+}
+
+async function handleChoiceSelect(index, type) {
+  await persistProjectEditAfter(() => handleChoiceSelectInState(index, type));
+}
+
+async function regeneratePlotBlockResult(block) {
+  await persistProjectEditAfter(() => regeneratePlotBlockResultToState(block));
+}
+
+async function regenerateCurrentChoices(type) {
+  await persistProjectEditAfter(() => regenerateCurrentChoicesToState(type));
+}
+
+async function continuePendingPlotGeneration() {
+  await persistProjectEditAfter(continuePendingPlotGenerationToState);
+}
+
+async function finalWriting() {
+  await persistProjectEditAfter(finalWritingToState);
+}
+
+async function resetAll() {
+  resetAllToState();
+  await saveCurrentProjectSnapshot();
+}
 
 async function generatePendingChoices() {
   const chapter = state.chapters.find((item) => item.chapterNum === state.currentChapter);
@@ -667,7 +770,7 @@ async function generatePendingChoices() {
     await generateBigHooks();
     return;
   }
-  if ((chapter?.plotPoints?.length || 0) >= 4 && !state.currentHooks.length) {
+  if (completedPlotBlockCountForChapter(state.currentChapter) >= 4 && !state.currentHooks.length) {
     await generateHooks();
     return;
   }
@@ -828,12 +931,84 @@ const {
   setupProjectLibraryWatchers,
 } = projectLibrary;
 
+async function persistProjectEdit(action, shouldPersist = () => true) {
+  action();
+  if (!shouldPersist()) return;
+  await saveCurrentProjectSnapshot();
+}
+
+async function saveBrainholeOption() {
+  const editingIndex = editingBrainholeIndex.value;
+  await persistProjectEdit(
+    () => saveBrainholeOptionToState(),
+    () => editingIndex !== editingBrainholeIndex.value,
+  );
+}
+
+async function addManualBrainholeOption() {
+  const previousCount = state.brainholeOptions.length;
+  await persistProjectEdit(
+    () => addManualBrainholeOptionToState(),
+    () => state.brainholeOptions.length !== previousCount,
+  );
+}
+
+async function deleteBrainholeOption(index) {
+  const previousCount = state.brainholeOptions.length;
+  await persistProjectEdit(
+    () => deleteBrainholeOptionFromState(index),
+    () => state.brainholeOptions.length !== previousCount,
+  );
+}
+
+async function saveEditBlock(blockId) {
+  const wasEditing = editingBlockId.value === blockId;
+  await persistProjectEdit(
+    () => saveEditBlockToState(blockId),
+    () => wasEditing && editingBlockId.value !== blockId,
+  );
+}
+
+async function deletePlotBlock(block) {
+  const previousBlockCount = storyBlocks.value.length;
+  await persistProjectEdit(
+    () => deletePlotBlockFromState(block),
+    () => storyBlocks.value.length !== previousBlockCount,
+  );
+}
+
+async function updateCurrentChoiceOption(index, value, type) {
+  const previousValue = JSON.stringify(type === 'hook' ? state.currentHooks[index] : type === 'bighook' ? state.bigHooks[index] : state.currentOptions[index]);
+  await persistProjectEdit(
+    () => updateCurrentChoiceOptionInState(index, value, type),
+    () => previousValue !== JSON.stringify(type === 'hook' ? state.currentHooks[index] : type === 'bighook' ? state.bigHooks[index] : state.currentOptions[index]),
+  );
+}
+
+async function addCurrentChoiceOption(value, type) {
+  const target = type === 'hook' ? state.currentHooks : type === 'bighook' ? state.bigHooks : state.currentOptions;
+  const previousCount = target.length;
+  await persistProjectEdit(
+    () => addCurrentChoiceOptionToState(value, type),
+    () => target.length !== previousCount,
+  );
+}
+
+async function deleteCurrentChoiceOption(index, type) {
+  const target = type === 'hook' ? state.currentHooks : type === 'bighook' ? state.bigHooks : state.currentOptions;
+  const previousCount = target.length;
+  await persistProjectEdit(
+    () => deleteCurrentChoiceOptionFromState(index, type),
+    () => target.length !== previousCount,
+  );
+}
+
 const {
-  clearWindVaneFile,
-  handleWindVaneFileChange,
+  clearWindVaneFile: clearWindVaneFileFromState,
+  handleWindVaneFileChange: handleWindVaneFileChangeInState,
   handleWindVaneDragOver,
   handleWindVaneDragLeave,
-  handleFileDrop,
+  handleFileDrop: handleFileDropInState,
 } = useWindVaneFile({
   windVaneFile,
   uploadInputRef,
@@ -841,6 +1016,28 @@ const {
   pushToast,
   isLoading,
 });
+
+async function clearWindVaneFile() {
+  const hadFile = Boolean(windVaneFile.value);
+  clearWindVaneFileFromState();
+  if (hadFile) await saveCurrentProjectSnapshot();
+}
+
+async function handleWindVaneFileChange(event) {
+  const previousUploadedAt = windVaneFile.value?.uploadedAt || '';
+  await handleWindVaneFileChangeInState(event);
+  if ((windVaneFile.value?.uploadedAt || '') !== previousUploadedAt) {
+    await saveCurrentProjectSnapshot();
+  }
+}
+
+async function handleFileDrop(event) {
+  const previousUploadedAt = windVaneFile.value?.uploadedAt || '';
+  await handleFileDropInState(event);
+  if ((windVaneFile.value?.uploadedAt || '') !== previousUploadedAt) {
+    await saveCurrentProjectSnapshot();
+  }
+}
 
 setupProjectLibraryWatchers();
 void initializeDatabaseState();
@@ -977,6 +1174,7 @@ void initializeDatabaseState();
           :current-choice-type="currentChoiceType"
           :selected-choice-index="selectedChoiceIndex"
           :style-input="styleInput"
+          :custom-prompt-instruction="state.customPromptInstruction"
           :quick-styles="QUICK_STYLES"
           :is-plot-block="isPlotBlock"
           :is-latest-regeneratable-plot-block="isLatestRegeneratablePlotBlock"
@@ -1014,6 +1212,7 @@ void initializeDatabaseState();
           @delete-current-choice-option="deleteCurrentChoiceOption"
           @favorite-current-choice="favoriteCurrentChoice"
           @update:style-input="styleInput = $event"
+          @update:custom-prompt-instruction="state.customPromptInstruction = $event"
           @final-writing="finalWriting"
           @copy-final-work="copyFinalWork"
           @download-final-work="downloadFinalWork"
@@ -1142,6 +1341,7 @@ void initializeDatabaseState();
       :prompt-configs="promptConfigs"
       :active-prompt-id="activePromptId"
       :active-prompt-config="activePromptConfig"
+      :editor-version="promptEditorVersion"
       @close="requestClosePromptModal"
       @update:active-prompt-id="activePromptId = $event"
       @update-prompt-config="updatePromptConfigField"

@@ -18,6 +18,10 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  editorVersion: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits([
@@ -301,7 +305,7 @@ onBeforeUnmount(() => {
           </button>
         </nav>
 
-        <article v-if="activePromptConfig" class="prompt-editor">
+        <article v-if="activePromptConfig" :key="`${activePromptConfig.id}-${editorVersion}`" class="prompt-editor">
           <div class="prompt-editor-heading">
             <div>
               <h3>{{ activePromptConfig.title }}</h3>
@@ -374,6 +378,7 @@ onBeforeUnmount(() => {
           </div>
           <div
             :id="`${activePromptConfig.id}-system`"
+            :key="`${activePromptConfig.id}-system-${editorVersion}`"
             class="prompt-textarea prompt-rich-editor system-prompt"
             role="textbox"
             aria-multiline="true"
@@ -422,6 +427,7 @@ onBeforeUnmount(() => {
           </div>
           <div
             :id="`${activePromptConfig.id}-user`"
+            :key="`${activePromptConfig.id}-user-${editorVersion}`"
             class="prompt-textarea prompt-rich-editor"
             role="textbox"
             aria-multiline="true"
