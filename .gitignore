@@ -6,3 +6,4 @@ data/
 *.local
 .DS_Store
 Thumbs.db
+vite-*.log

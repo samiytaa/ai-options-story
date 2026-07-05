@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
 import ApiConfigModal from './components/app/ApiConfigModal.vue';
+import AssistantFullscreenModal from './components/app/AssistantFullscreenModal.vue';
 import BrainholeOptionEditModal from './components/app/BrainholeOptionEditModal.vue';
 import EditorEmptyState from './components/app/EditorEmptyState.vue';
 import EditorLeftPanel from './components/app/EditorLeftPanel.vue';
@@ -130,10 +131,15 @@ const editingProjectId = ref(null);
 const editingProjectName = ref('');
 const activeStageView = ref('brainhole');
 const selectedStoryBlockId = ref('');
-const rightPanelActiveTab = ref('quickActions');
+const rightPanelActiveTab = ref('promptControl');
+const showAssistantModal = ref(false);
 const assistantInput = ref('');
 const assistantMessages = ref([]);
 const assistantLoading = ref(false);
+const assistantEditingContent = ref('');
+const assistantEditing = ref(false);
+const assistantEditingMessageId = ref(null);
+const assistantEditingMessageContent = ref('');
 const pendingPlotGenerationAvailable = ref(false);
 
 const selectedStoryBlock = computed(() => storyBlocks.value.find((block) => block.id === selectedStoryBlockId.value) || null);
@@ -649,7 +655,6 @@ const storyFlow = useStoryFlow({
     },
   },
   copySelectedChoicesWithBody,
-  selectedChoiceCopyText,
   windVaneFile,
   editingBlockId,
   editingContent,
@@ -688,7 +693,6 @@ const {
   addManualBrainholeOption: addManualBrainholeOptionToState,
   parsePlotBlockId,
   updateStoryBlockContent,
-  startEditBlock,
   cancelEditBlock,
   syncEditedBlockToState,
   saveEditBlock: saveEditBlockToState,
@@ -706,13 +710,17 @@ const {
   deleteCurrentChoiceOption: deleteCurrentChoiceOptionFromState,
   regeneratePlotBlockResult: regeneratePlotBlockResultToState,
   regenerateCurrentChoices: regenerateCurrentChoicesToState,
+  generateCurrentChoiceResultVariants: generateCurrentChoiceResultVariantsFromState,
   continuePendingPlotGeneration: continuePendingPlotGenerationToState,
   finalWriting: finalWritingToState,
   copyFinalWork,
+  buildFinalBodyCopyText,
   copyFinalBodyFromSidebar,
   downloadFinalWork,
   resetAll: resetAllToState,
 } = storyFlow;
+
+const copyBodyPreviewText = computed(() => (canCopyCurrentBody.value ? buildFinalBodyCopyText() : ''));
 
 async function persistProjectEditAfter(action) {
   await action();
@@ -751,6 +759,15 @@ async function regenerateCurrentChoices(type) {
   await persistProjectEditAfter(() => regenerateCurrentChoicesToState(type));
 }
 
+async function generateCurrentChoiceResultVariants(index, type) {
+  return generateCurrentChoiceResultVariantsFromState(index, type);
+}
+
+async function handleGenerateCurrentChoiceResultVariants(index, type, done) {
+  const variants = await generateCurrentChoiceResultVariants(index, type);
+  if (typeof done === 'function') done(variants);
+}
+
 async function continuePendingPlotGeneration() {
   await persistProjectEditAfter(continuePendingPlotGenerationToState);
 }
@@ -779,19 +796,85 @@ async function generatePendingChoices() {
 
 function selectStoryBlock(block) {
   if (!block?.content || block.id === 'brainhole-options') return;
-  if (selectedStoryBlockId.value === block.id) {
-    selectedStoryBlockId.value = '';
+  selectedStoryBlockId.value = block.id;
+  assistantEditing.value = false;
+  assistantEditingContent.value = block.content;
+  showAssistantModal.value = true;
+}
+
+function openAssistantEditor(block) {
+  if (!block?.content || block.id === 'brainhole-options') return;
+  selectedStoryBlockId.value = block.id;
+  assistantEditingContent.value = block.content;
+  assistantEditing.value = true;
+  showAssistantModal.value = true;
+}
+
+function closeAssistantModal() {
+  showAssistantModal.value = false;
+  assistantEditing.value = false;
+}
+
+function startAssistantEdit() {
+  const block = selectedStoryBlock.value;
+  if (!block?.content) return;
+  assistantEditingContent.value = block.content;
+  assistantEditing.value = true;
+}
+
+function cancelAssistantEdit() {
+  assistantEditing.value = false;
+  assistantEditingContent.value = selectedStoryBlock.value?.content || '';
+}
+
+async function saveAssistantEdit() {
+  const block = selectedStoryBlock.value;
+  const content = assistantEditingContent.value.trim();
+  if (!block?.id) {
+    pushToast('原剧情节点已不存在，无法保存', 'error');
     return;
   }
-  selectedStoryBlockId.value = block.id;
-  rightPanelActiveTab.value = 'assistant';
+  if (!content) {
+    pushToast('内容不能为空', 'error');
+    return;
+  }
+
+  updateStoryBlockContent(block.id, content);
+  syncEditedBlockToState(block.id, content);
+  assistantEditing.value = false;
+  assistantEditingContent.value = content;
+  await saveCurrentProjectSnapshot();
+  pushToast('内容已更新', 'success');
 }
 
 function getAssistantConversationContext() {
-  return assistantMessages.value
+  return formatAssistantConversationContext(assistantMessages.value);
+}
+
+function formatAssistantConversationContext(messages) {
+  return messages
     .slice(-6)
     .map((message) => `${message.role === 'user' ? '用户' : 'AI'}：${message.content}`)
     .join('\n\n');
+}
+
+async function requestAssistantRewrite(instruction, block, conversationContext = getAssistantConversationContext()) {
+  return requestAi([
+    {
+      role: 'system',
+      content: '你是小说剧情编辑助手。只根据用户要求改写当前片段，保持上下文连续和人物关系一致。输出可直接替换当前片段的正文，不要解释，不要添加标题，不要使用 Markdown。正文格式必须保持短篇小说分行写法，一句话一行，不要写成大段。',
+    },
+    {
+      role: 'user',
+      content: [
+        `全局剧情上下文：\n${buildContextSummary(state) || '暂无'}`,
+        `当前节点：${selectedStoryBlockTitle.value}`,
+        `当前片段：\n${block.content}`,
+        conversationContext ? `最近对话：\n${conversationContext}` : '',
+        `本次调整要求：\n${instruction}`,
+      ].filter(Boolean).join('\n\n'),
+    },
+  ], 0.72);
 }
 
 async function sendAssistantMessage() {
@@ -821,22 +904,7 @@ async function sendAssistantMessage() {
   assistantLoading.value = true;
 
   try {
-    const result = await requestAi([
-      {
-        role: 'system',
-        content: '你是小说剧情编辑助手。只根据用户要求改写当前片段，保持上下文连续和人物关系一致。输出可直接替换当前片段的正文，不要解释，不要添加标题，不要使用 Markdown。正文格式必须保持短篇小说分行写法，一句话一行，不要写成大段。',
-      },
-      {
-        role: 'user',
-        content: [
-          `全局剧情上下文：\n${buildContextSummary(state) || '暂无'}`,
-          `当前节点：${selectedStoryBlockTitle.value}`,
-          `当前片段：\n${block.content}`,
-          getAssistantConversationContext() ? `最近对话：\n${getAssistantConversationContext()}` : '',
-          `本次调整要求：\n${instruction}`,
-        ].filter(Boolean).join('\n\n'),
-      },
-    ], 0.72);
+    const result = await requestAssistantRewrite(instruction, block);
 
     assistantMessages.value.push({
       id: Date.now() + Math.random(),
@@ -871,12 +939,86 @@ async function applyAssistantRewrite(message) {
   syncEditedBlockToState(block.id, content);
   message.applied = true;
   selectedStoryBlockId.value = block.id;
+  assistantEditing.value = false;
+  assistantEditingContent.value = content;
+  showAssistantModal.value = true;
   await saveCurrentProjectSnapshot();
   pushToast('已应用到当前剧情节点', 'success');
 }
 
 function clearAssistantConversation() {
   assistantMessages.value = [];
+  assistantEditingMessageId.value = null;
+  assistantEditingMessageContent.value = '';
+}
+
+function startEditAssistantMessage(message) {
+  if (!message?.id || assistantLoading.value) return;
+  assistantEditingMessageId.value = message.id;
+  assistantEditingMessageContent.value = message.content || '';
+}
+
+function cancelEditAssistantMessage() {
+  assistantEditingMessageId.value = null;
+  assistantEditingMessageContent.value = '';
+}
+
+function saveEditAssistantMessage(message) {
+  const target = assistantMessages.value.find((item) => item.id === message?.id);
+  const content = assistantEditingMessageContent.value.trim();
+  if (!target) {
+    cancelEditAssistantMessage();
+    return;
+  }
+  if (!content) {
+    pushToast('消息内容不能为空', 'error');
+    return;
+  }
+  target.content = content;
+  if (target.role === 'assistant') target.applied = false;
+  cancelEditAssistantMessage();
+}
+
+function deleteAssistantMessage(message) {
+  assistantMessages.value = assistantMessages.value.filter((item) => item.id !== message?.id);
+  if (assistantEditingMessageId.value === message?.id) cancelEditAssistantMessage();
+}
+
+async function regenerateAssistantMessage(message) {
+  if (!message?.id || message.role !== 'assistant' || assistantLoading.value) return;
+  const messageIndex = assistantMessages.value.findIndex((item) => item.id === message.id);
+  if (messageIndex === -1) return;
+
+  const previousUserMessage = assistantMessages.value
+    .slice(0, messageIndex)
+    .reverse()
+    .find((item) => item.role === 'user' && item.content?.trim());
+  if (!previousUserMessage) {
+    pushToast('没有找到可用于重新生成的用户要求', 'error');
+    return;
+  }
+
+  const block = storyBlocks.value.find((item) => item.id === message.blockId) || selectedStoryBlock.value;
+  if (!block?.content) {
+    pushToast('原剧情节点已不存在，无法重新生成', 'error');
+    return;
+  }
+
+  selectedStoryBlockId.value = block.id;
+  assistantLoading.value = true;
+  try {
+    const conversationContext = formatAssistantConversationContext(assistantMessages.value.slice(0, messageIndex));
+    const result = await requestAssistantRewrite(previousUserMessage.content.trim(), block, conversationContext);
+    message.content = result.trim();
+    message.blockId = block.id;
+    message.blockTitle = selectedStoryBlockTitle.value;
+    message.applied = false;
+    cancelEditAssistantMessage();
+  } catch (error) {
+    pushToast(`重新生成失败：${error.message}`, 'error');
+  } finally {
+    assistantLoading.value = false;
+  }
 }
 
 projectLibrary = useProjectLibrary({
@@ -1181,7 +1323,7 @@ void initializeDatabaseState();
           :format-plot-choice="normalizePlotChoice"
           @favorite-story-block="favoriteStoryBlock"
           @select-story-block="selectStoryBlock"
-          @start-edit-block="startEditBlock"
+          @start-edit-block="openAssistantEditor"
           @delete-plot-block="deletePlotBlock"
           @regenerate-plot-block-result="regeneratePlotBlockResult"
           @update:editing-content="editingContent = $event"
@@ -1205,6 +1347,7 @@ void initializeDatabaseState();
           @generate-guide-and-first-plot="generateGuideAndFirstPlot"
           @select-choice="handleChoiceSelect"
           @regenerate-current-choices="regenerateCurrentChoices"
+          @generate-current-choice-result-variants="handleGenerateCurrentChoiceResultVariants"
           @continue-pending-plot-generation="continuePendingPlotGeneration"
           @generate-pending-choices="generatePendingChoices"
           @update-current-choice-option="updateCurrentChoiceOption"
@@ -1226,24 +1369,43 @@ void initializeDatabaseState();
         :active-tab="rightPanelActiveTab"
         :prompt-automation-settings="promptAutomationSettings"
         :copy-selected-choices-with-body="copySelectedChoicesWithBody"
-        :outline-entries="outlineEntries"
-        :selected-story-block-title="selectedStoryBlockTitle"
-        :selected-story-block-content="selectedStoryBlock?.content || ''"
-        :assistant-input="assistantInput"
-        :assistant-messages="assistantMessages"
-        :assistant-loading="assistantLoading"
-        :can-use-assistant="canUseAssistant"
+        :copy-body-preview-text="copyBodyPreviewText"
         @toggle-collapse="togglePanel('right')"
         @update:active-tab="rightPanelActiveTab = $event"
         @update-prompt-automation-setting="updatePromptAutomationSetting"
         @copy-body="copyFinalBodyFromSidebar"
         @update:copy-selected-choices-with-body="copySelectedChoicesWithBody = $event"
-        @update:assistant-input="assistantInput = $event"
-        @send-assistant-message="sendAssistantMessage"
-        @apply-assistant-rewrite="applyAssistantRewrite"
-        @clear-assistant-conversation="clearAssistantConversation"
       />
     </div>
+
+    <AssistantFullscreenModal
+      :visible="showAssistantModal"
+      :selected-story-block-title="selectedStoryBlockTitle"
+      :selected-story-block-content="selectedStoryBlock?.content || ''"
+      :assistant-input="assistantInput"
+      :assistant-messages="assistantMessages"
+      :assistant-loading="assistantLoading"
+      :can-use-assistant="canUseAssistant"
+      :editing-content="assistantEditingContent"
+      :is-editing="assistantEditing"
+      :editing-message-id="assistantEditingMessageId"
+      :editing-message-content="assistantEditingMessageContent"
+      @close="closeAssistantModal"
+      @update:assistant-input="assistantInput = $event"
+      @update:editing-content="assistantEditingContent = $event"
+      @update:editing-message-content="assistantEditingMessageContent = $event"
+      @send-assistant-message="sendAssistantMessage"
+      @apply-assistant-rewrite="applyAssistantRewrite"
+      @clear-assistant-conversation="clearAssistantConversation"
+      @start-edit="startAssistantEdit"
+      @save-edit="saveAssistantEdit"
+      @cancel-edit="cancelAssistantEdit"
+      @start-edit-message="startEditAssistantMessage"
+      @save-edit-message="saveEditAssistantMessage"
+      @cancel-edit-message="cancelEditAssistantMessage"
+      @delete-message="deleteAssistantMessage"
+      @regenerate-message="regenerateAssistantMessage"
+    />
 
     <ManualBrainholeModal
       :visible="showManualBrainholeModal"

@@ -282,15 +282,18 @@ export function useProjectLibrary(deps) {
 
     if (!favorite) {
       pushToast('收藏内容不能为空', 'error');
-      return;
+      return null;
     }
 
     try {
       const savedFavorite = await createFavoriteRecord(favorite);
-      favorites.value = [savedFavorite, ...favorites.value.filter((item) => item.id !== savedFavorite.id)];
+      const normalizedFavorite = normalizeFavorite(savedFavorite);
+      favorites.value = [normalizedFavorite, ...favorites.value.filter((item) => item.id !== normalizedFavorite.id)];
       pushToast('已加入收藏库', 'success');
+      return normalizedFavorite;
     } catch (error) {
       pushToast(`收藏失败：${error.message}`, 'error');
+      return null;
     }
   }
 
@@ -329,9 +332,12 @@ export function useProjectLibrary(deps) {
 
     try {
       const savedFavorite = await updateFavoriteRecord(item.id, favorite);
+      const normalizedFavorite = normalizeFavorite(savedFavorite);
       const index = favorites.value.findIndex((favoriteItem) => favoriteItem.id === savedFavorite.id);
       if (index >= 0) {
-        favorites.value.splice(index, 1, normalizeFavorite(savedFavorite));
+        favorites.value.splice(index, 1, normalizedFavorite);
+      } else if (normalizedFavorite) {
+        favorites.value = [normalizedFavorite, ...favorites.value];
       }
       cancelEditFavorite();
       pushToast('收藏已保存', 'success');
@@ -357,7 +363,7 @@ export function useProjectLibrary(deps) {
     const payload = favoritePayloadFromDraft(type, manualFavoriteDraft);
     const { content, note } = favoriteSummaryFromPayload(type, payload, manualFavoriteDraft);
 
-    await addFavorite({
+    const savedFavorite = await addFavorite({
       type,
       title: manualFavoriteDraft.title || `手动${FAVORITE_TABS.find((tab) => tab.value === type)?.label}`,
       content,
@@ -365,7 +371,9 @@ export function useProjectLibrary(deps) {
       payload,
       projectName: manualFavoriteDraft.projectName || activeProjectName.value,
     });
-    cancelAddFavorite();
+    if (savedFavorite) {
+      cancelAddFavorite();
+    }
   }
 
   async function deleteFavorite(favoriteId) {

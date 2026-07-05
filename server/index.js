@@ -25,15 +25,56 @@ function normalizeProjectInput(input = {}) {
   };
 }
 
+function summarizeFavoritePayload(type, payload = null) {
+  if (!payload || typeof payload !== 'object') {
+    return { content: '', note: '' };
+  }
+
+  if (type === 'brainhole') {
+    return {
+      content: String(payload.idea || '').trim(),
+      note: String(payload.fit || '').trim(),
+    };
+  }
+
+  if (type === 'plot') {
+    const chosenOption = Array.isArray(payload.options)
+      ? payload.options[payload.chosenOption]
+      : null;
+    const chosenText = chosenOption
+      ? `选项：${chosenOption.option || ''}\n结果：${chosenOption.result || ''}`.trim()
+      : '';
+    return {
+      content: String(payload.desc || '').trim(),
+      note: chosenText,
+    };
+  }
+
+  if (type === 'option') {
+    return {
+      content: String(payload.text || payload.choice?.option || payload.choice?.hook || '').trim(),
+      note: String(payload.choice?.result || payload.choice?.direction || '').trim(),
+    };
+  }
+
+  return {
+    content: String(payload.content || '').trim(),
+    note: String(payload.note || '').trim(),
+  };
+}
+
 function normalizeFavoriteInput(input = {}) {
   const now = nowIso();
+  const allowedTypes = new Set(['brainhole', 'plot', 'option']);
+  const type = allowedTypes.has(input.type) ? input.type : 'brainhole';
   const payload = input.payload && typeof input.payload === 'object' ? input.payload : null;
+  const payloadSummary = summarizeFavoritePayload(type, payload);
   return {
     id: String(input.id || `fav-${randomUUID()}`),
-    type: String(input.type || 'brainhole'),
+    type,
     title: String(input.title || '收藏').trim() || '收藏',
-    content: String(input.content || '').trim(),
-    note: String(input.note || ''),
+    content: String(input.content || payloadSummary.content || '').trim(),
+    note: String(input.note ?? payloadSummary.note ?? ''),
     payload,
     projectId: String(input.projectId || ''),
     projectName: String(input.projectName || ''),

@@ -289,3 +289,40 @@ export function parsePlotOptions(text) {
 
   return values.slice(0, 4);
 }
+
+export function parseChoiceResultVariants(text, type = 'option') {
+  const jsonPayload = parseJsonObjectFromText(text);
+  const jsonKey = type === 'option' ? 'resultVariants' : 'directionVariants';
+  const jsonItems = Array.isArray(jsonPayload?.[jsonKey]) ? jsonPayload[jsonKey] : null;
+
+  if (jsonItems?.length) {
+    return jsonItems
+      .map((item) => (typeof item === 'string' ? item : item?.result || item?.direction || item?.text || ''))
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 4);
+  }
+
+  const secondaryLabel = type === 'option' ? '结果' : '剧情走向';
+  const lines = String(text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const values = [];
+
+  for (let index = 1; index <= 4; index += 1) {
+    const line = lines.find((item) => new RegExp(`^(?:${secondaryLabel}|变体|候选)${index}[：:]`).test(item));
+    if (line) {
+      values.push(line.replace(new RegExp(`^(?:${secondaryLabel}|变体|候选)${index}[：:]\\s*`), '').trim());
+    }
+  }
+
+  if (!values.length) {
+    return lines
+      .map((line) => line.replace(/^\d+[.、：:]\s*/, '').trim())
+      .filter(Boolean)
+      .slice(0, 4);
+  }
+
+  return values.filter(Boolean).slice(0, 4);
+}

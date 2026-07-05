@@ -26,13 +26,15 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['select', 'regenerate', 'update-option', 'add-option', 'delete-option', 'favorite']);
+const emit = defineEmits(['select', 'regenerate', 'generate-result-variants', 'update-option', 'add-option', 'delete-option', 'favorite']);
 const editingIndex = ref(null);
 const editingText = ref('');
 const showAddOptionModal = ref(false);
 const manualOptionText = ref('');
 const manualResultText = ref('');
 const currentViewIndex = ref(0);
+const resultVariantIndex = ref(null);
+const resultVariants = ref([]);
 
 const canGoPrev = computed(() => currentViewIndex.value > 0);
 const canGoNext = computed(() => currentViewIndex.value < props.options.length - 1);
@@ -45,6 +47,8 @@ watch(
     manualOptionText.value = '';
     manualResultText.value = '';
     showAddOptionModal.value = false;
+    resultVariantIndex.value = null;
+    resultVariants.value = [];
     currentViewIndex.value = 0;
   },
   { deep: true },
@@ -93,6 +97,38 @@ function saveEdit(index) {
   if (!value) return;
   emit('update-option', index, props.type === 'option' ? normalizePlotChoice(value, index) : normalizeHookChoice(value, index, props.type), props.type);
   cancelEdit();
+}
+
+function openResultVariants(index) {
+  resultVariantIndex.value = index;
+  resultVariants.value = [];
+  emit('generate-result-variants', index, props.type, (variants = []) => {
+    if (resultVariantIndex.value !== index) return;
+    resultVariants.value = variants;
+  });
+}
+
+function closeResultVariants() {
+  resultVariantIndex.value = null;
+  resultVariants.value = [];
+}
+
+function applyResultVariant(variant) {
+  const index = resultVariantIndex.value;
+  if (index === null || !variant) return;
+  const current = props.type === 'option'
+    ? optionParts(props.options[index], index)
+    : hookParts(props.options[index], index);
+
+  emit(
+    'update-option',
+    index,
+    props.type === 'option'
+      ? { ...current, result: variant }
+      : { ...current, direction: variant },
+    props.type,
+  );
+  closeResultVariants();
 }
 
 function addManualOption() {
@@ -154,10 +190,94 @@ function optionCardKey(option, index) {
 function selectButtonText(index) {
   return props.selectedIndex === index ? '取消选中' : '选择';
 }
+
+function resultVariantModalTitle() {
+  return props.type === 'option' ? '选择一个结果' : '选择一个剧情走向';
+}
+
+function currentResultVariantSource() {
+  const index = resultVariantIndex.value;
+  if (index === null || !props.options[index]) return '';
+  return props.type === 'option'
+    ? optionParts(props.options[index], index).option
+    : hookParts(props.options[index], index).hook;
+}
+
+function choiceListClass(type) {
+  if (type === 'hook') return 'choice-list-hook';
+  if (type === 'bighook') return 'choice-list-bighook';
+  return 'choice-list-option';
+}
 </script>
 
 <template>
-  <div class="choice-list">
+  <div class="choice-list" :class="choiceListClass(type)">
+    <!-- 紧凑型工具栏：导航 + 操作 -->
+    <div class="choice-compact-toolbar">
+      <div class="choice-toolbar-left">
+        <button
+          class="btn btn-secondary btn-sm choice-nav-btn"
+          type="button"
+          :disabled="disabled || !canGoPrev"
+          @click="goToPrev"
+          title="上一个选项"
+        >
+          ←
+        </button>
+
+        <div class="choice-indicator-compact">
+          <span class="choice-counter">{{ currentViewIndex + 1 }} / {{ options.length }}</span>
+          <div class="choice-dots-compact">
+            <span
+              v-for="(option, index) in options"
+              :key="`dot-${index}`"
+              class="carousel-dot"
+              :class="{ active: index === currentViewIndex }"
+              @click="currentViewIndex = index"
+            ></span>
+          </div>
+        </div>
+
+        <button
+          class="btn btn-secondary btn-sm choice-nav-btn"
+          type="button"
+          :disabled="disabled || !canGoNext"
+          @click="goToNext"
+          title="下一个选项"
+        >
+          →
+        </button>
+      </div>
+
+      <div class="choice-toolbar-right">
+        <span class="choice-type-badge">{{ labelForType(type) }}池</span>
+        <button
+          v-if="selectedIndex === null"
+          class="btn btn-secondary btn-sm"
+          type="button"
+          :disabled="disabled"
+          @click="emit('regenerate', type)"
+          title="重新生成选项"
+        >
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          重新生成
+        </button>
+        <button
+          v-if="selectedIndex === null"
+          class="btn btn-secondary btn-sm"
+          type="button"
+          :disabled="disabled"
+          @click="openAddOptionModal"
+          title="手动添加选项"
+        >
+          +
+        </button>
+      </div>
+    </div>
+
     <!-- 选项卡片轮播容器 -->
     <div class="choice-carousel-container">
       <article
@@ -171,21 +291,33 @@ function selectButtonText(index) {
 
         <div v-if="type === 'option'" class="option-structured">
           <div class="option-part option-action">
-            <span class="option-part-label">选项</span>
+            <div class="option-part-header">
+              <span class="option-part-tag">选项</span>
+              <span class="option-part-attr">choice-primary</span>
+            </div>
             <p>{{ optionParts(option, index).option }}</p>
           </div>
           <div class="option-part option-result">
-            <span class="option-part-label">结果</span>
+            <div class="option-part-header">
+              <span class="option-part-tag">结果</span>
+              <span class="option-part-attr">choice-outcome</span>
+            </div>
             <p>{{ optionParts(option, index).result }}</p>
           </div>
         </div>
         <div v-else class="option-structured">
           <div class="option-part option-action">
-            <span class="option-part-label">{{ primaryLabelForType(type) }}</span>
+            <div class="option-part-header">
+              <span class="option-part-tag">{{ primaryLabelForType(type) }}</span>
+              <span class="option-part-attr">hook-primary</span>
+            </div>
             <p>{{ hookParts(option, index).hook }}</p>
           </div>
           <div class="option-part option-result">
-            <span class="option-part-label">剧情走向</span>
+            <div class="option-part-header">
+              <span class="option-part-tag">剧情走向</span>
+              <span class="option-part-attr">hook-direction</span>
+            </div>
             <p>{{ hookParts(option, index).direction }}</p>
           </div>
         </div>
@@ -217,6 +349,14 @@ function selectButtonText(index) {
               修改
             </button>
             <button
+              class="btn btn-secondary btn-sm"
+              type="button"
+              :disabled="disabled || selectedIndex !== null"
+              @click="openResultVariants(index)"
+            >
+              重新生成{{ secondaryLabelForType(type) }}
+            </button>
+            <button
               class="btn btn-danger btn-sm"
               type="button"
               :disabled="disabled || selectedIndex !== null"
@@ -237,60 +377,45 @@ function selectButtonText(index) {
       </article>
     </div>
 
-    <!-- 轮播导航 -->
-    <div class="choice-carousel-nav">
-      <button
-        class="btn btn-secondary btn-sm carousel-nav-btn"
-        type="button"
-        :disabled="disabled || !canGoPrev"
-        @click="goToPrev"
-      >
-        ← 上一个
-      </button>
-
-      <div class="carousel-center">
-        <div class="carousel-indicator">
-          <span
-            v-for="(option, index) in options"
-            :key="`dot-${index}`"
-            class="carousel-dot"
-            :class="{ active: index === currentViewIndex }"
-            @click="currentViewIndex = index"
-          ></span>
-        </div>
-      </div>
-
-      <button
-        class="btn btn-secondary btn-sm carousel-nav-btn"
-        type="button"
-        :disabled="disabled || !canGoNext"
-        @click="goToNext"
-      >
-        下一个 →
-      </button>
-    </div>
-
-    <div v-if="selectedIndex !== null && options[selectedIndex]" class="selected-choice-banner">
+    <!-- 已选择横幅 -->
+    <div v-if="selectedIndex !== null && options[selectedIndex]" class="selected-choice-banner" :class="{ 'hook-type': type !== 'option' }">
       <span>已选择{{ labelForType(type) }} {{ selectedIndex + 1 }}</span>
       <template v-if="type === 'option'">
-        <p class="selected-choice-option">选项：{{ optionParts(options[selectedIndex], selectedIndex).option }}</p>
-        <p class="selected-choice-result-text">结果：{{ optionParts(options[selectedIndex], selectedIndex).result }}</p>
+        <div class="selected-choice-block">
+          <div class="selected-choice-block-header">
+            <span class="selected-choice-block-tag">选项</span>
+            <span class="selected-choice-block-attr">choice-primary</span>
+          </div>
+          <p class="selected-choice-option">{{ optionParts(options[selectedIndex], selectedIndex).option }}</p>
+        </div>
+        <div class="selected-choice-block">
+          <div class="selected-choice-block-header">
+            <span class="selected-choice-block-tag">结果</span>
+            <span class="selected-choice-block-attr">choice-outcome</span>
+          </div>
+          <p class="selected-choice-result-text">{{ optionParts(options[selectedIndex], selectedIndex).result }}</p>
+        </div>
       </template>
       <template v-else>
-        <p class="selected-choice-option">{{ primaryLabelForType(type) }}：{{ hookParts(options[selectedIndex], selectedIndex).hook }}</p>
-        <p class="selected-choice-result-text">剧情走向：{{ hookParts(options[selectedIndex], selectedIndex).direction }}</p>
+        <div class="selected-choice-block">
+          <div class="selected-choice-block-header">
+            <span class="selected-choice-block-tag">{{ primaryLabelForType(type) }}</span>
+            <span class="selected-choice-block-attr">hook-primary</span>
+          </div>
+          <p class="selected-choice-option">{{ hookParts(options[selectedIndex], selectedIndex).hook }}</p>
+        </div>
+        <div class="selected-choice-block">
+          <div class="selected-choice-block-header">
+            <span class="selected-choice-block-tag">剧情走向</span>
+            <span class="selected-choice-block-attr">hook-direction</span>
+          </div>
+          <p class="selected-choice-result-text">{{ hookParts(options[selectedIndex], selectedIndex).direction }}</p>
+        </div>
       </template>
     </div>
 
-    <div v-else class="choice-regenerate-panel">
-      <div class="choice-regenerate-actions">
-        <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="emit('regenerate', type)">
-          {{ regenerateText() }}
-        </button>
-        <button class="btn btn-secondary btn-sm" type="button" :disabled="disabled" @click="openAddOptionModal">
-          添加{{ labelForType(type) }}
-        </button>
-      </div>
+    <!-- 额外生成要求插槽 -->
+    <div v-if="selectedIndex === null" class="choice-extra-controls">
       <slot name="after-regenerate" />
     </div>
 
@@ -330,6 +455,36 @@ function selectButtonText(index) {
             保存
           </button>
         </footer>
+      </section>
+    </div>
+
+    <div v-if="resultVariantIndex !== null" class="modal-backdrop choice-add-backdrop" @click.self="closeResultVariants">
+      <section class="settings-modal choice-add-modal" role="dialog" aria-modal="true" aria-labelledby="choice-result-variant-title">
+        <header class="settings-modal-header">
+          <div>
+            <h2 id="choice-result-variant-title">{{ resultVariantModalTitle() }}</h2>
+            <p>会保留当前{{ primaryLabelForType(type) }}，只替换{{ secondaryLabelForType(type) }}。</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" @click="closeResultVariants">关闭</button>
+        </header>
+
+        <div class="settings-modal-body">
+          <section v-if="currentResultVariantSource()" class="choice-result-source">
+            <span class="option-part-label">当前{{ primaryLabelForType(type) }}</span>
+            <p>{{ currentResultVariantSource() }}</p>
+          </section>
+
+          <div v-if="!resultVariants.length" class="choice-result-variant-empty">正在生成候选...</div>
+          <div v-else class="choice-result-variant-list">
+            <article v-for="(variant, index) in resultVariants" :key="`variant-${index}`" class="choice-result-variant-card">
+              <span class="option-part-label">{{ secondaryLabelForType(type) }} {{ index + 1 }}</span>
+              <p>{{ variant }}</p>
+              <button class="btn btn-primary btn-sm" type="button" :disabled="disabled" @click="applyResultVariant(variant)">
+                选用这个
+              </button>
+            </article>
+          </div>
+        </div>
       </section>
     </div>
   </div>

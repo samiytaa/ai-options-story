@@ -4,11 +4,13 @@ import {
   buildContextSummary,
   createInitialState,
   ensureChapter,
+  formatChoiceForDisplay,
   formatChoiceForPrompt,
   formatHookForDisplay,
   formatHookForPrompt,
   normalizePlotChoice,
   normalizeHookChoice,
+  parseChoiceResultVariants,
   parseDirectionalHooks,
   parsePlotOptions,
 } from '../storyState';
@@ -45,7 +47,6 @@ export function useStoryFlow(deps) {
     styleInput,
     customPromptInstruction,
     copySelectedChoicesWithBody,
-    selectedChoiceCopyText,
     windVaneFile,
     editingBlockId,
     editingContent,
@@ -1031,6 +1032,52 @@ export function useStoryFlow(deps) {
     await generateOptionsForCurrentPlotPoint();
   }
 
+  async function generateCurrentChoiceResultVariants(index, type) {
+    if (!hasActiveProject()) return [];
+    const target = getCurrentChoiceTarget(type);
+    const currentChoice = target[index];
+    if (!currentChoice) return [];
+
+    const promptId = type === 'option'
+      ? 'optionResultVariants'
+      : type === 'bighook'
+        ? 'bigHookDirectionVariants'
+        : 'hookDirectionVariants';
+    const normalized = type === 'option'
+      ? normalizePlotChoice(currentChoice, index)
+      : normalizeHookChoice(currentChoice, index, type);
+
+    updateLoading(type === 'option' ? '正在生成这个选项的4个结果...' : '正在生成这个钩子的4个剧情走向...');
+
+    try {
+      const promptConfig = getPromptConfig(promptId);
+      const result = await requestAi(
+        buildPromptMessagesWithCustomInstruction(promptId, {
+          contextSummary: buildContextSummary(state),
+          chapterNum: state.currentChapter,
+          plotIndex: state.currentPlotPointIndex + 1,
+          optionText: normalized.option || '',
+          currentResult: normalized.result || '',
+          hookText: normalized.hook || '',
+          currentDirection: normalized.direction || '',
+        }),
+        promptConfig.temperature,
+      );
+      const variants = parseChoiceResultVariants(result, type);
+      if (!variants.length) {
+        notify('没有解析到可用候选，请调整提示词后重试', 'error');
+        return [];
+      }
+      notify('已生成4个候选，请选定一个', 'success');
+      return variants;
+    } catch (error) {
+      notify(`生成候选失败：${error.message}`, 'error');
+      return [];
+    } finally {
+      updateLoading();
+    }
+  }
+
   async function continuePendingPlotGeneration() {
     if (!hasActiveProject()) return;
     if (!pendingPlotGeneration) {
@@ -1091,6 +1138,18 @@ export function useStoryFlow(deps) {
     return Boolean(parsePlotBlockId(block.id));
   }
 
+  function buildSelectedPlotChoiceCopyText(plotRef) {
+    if (!getValue(copySelectedChoicesWithBody)) return '';
+
+    const chapter = state.chapters.find((item) => item.chapterNum === plotRef.chapterNum);
+    const plotPoint = chapter?.plotPoints?.[plotRef.plotIndex - 1];
+    const chosenOptionIndex = plotPoint?.chosenOption;
+    const chosenOption = plotPoint?.options?.[chosenOptionIndex];
+    if (!chosenOption) return '';
+
+    return `【第${plotRef.chapterNum}章 剧情点${plotRef.plotIndex} 选项${chosenOptionIndex + 1}】\n${formatChoiceForDisplay(chosenOption)}`;
+  }
+
   function buildExistingBodyText() {
     const blocks = getValue(storyBlocks).filter(isBodyCopyableBlock);
     if (!blocks.length) return '';
@@ -1104,7 +1163,9 @@ export function useStoryFlow(deps) {
 
       const plotRef = parsePlotBlockId(block.id);
       if (plotRef) {
-        return `【第${plotRef.chapterNum}章 剧情点${plotRef.plotIndex}】\n${content}`;
+        const selectedChoiceText = buildSelectedPlotChoiceCopyText(plotRef);
+        const plotText = `【第${plotRef.chapterNum}章 剧情点${plotRef.plotIndex}】\n${content}`;
+        return selectedChoiceText ? `${selectedChoiceText}\n\n${plotText}` : plotText;
       }
 
       return content;
@@ -1112,9 +1173,7 @@ export function useStoryFlow(deps) {
   }
 
   function buildFinalBodyCopyText() {
-    const body = buildExistingBodyText();
-    if (!getValue(copySelectedChoicesWithBody) || !getValue(selectedChoiceCopyText)) return body;
-    return `${body}\n\n---\n所选选项内容\n${getValue(selectedChoiceCopyText)}`;
+    return buildExistingBodyText();
   }
 
   async function copyFinalBodyFromSidebar() {
@@ -1205,6 +1264,7 @@ export function useStoryFlow(deps) {
     deleteCurrentChoiceOption,
     regeneratePlotBlockResult,
     regenerateCurrentChoices,
+    generateCurrentChoiceResultVariants,
     continuePendingPlotGeneration,
     finalWriting,
     copyFinalWork,
