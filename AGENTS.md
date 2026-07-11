@@ -26,7 +26,9 @@
 - The app is project-first. Before adding new mutating actions, verify whether they should require an active project.
 - Prefer narrowly scoped edits and follow the existing split between `src/App.vue`, `src/app/`, and `src/components/app/`.
 - Avoid broad reformatting or cleanup in a dirty worktree.
+- When searching project files, skip `node_modules` and `dist`.
 - Before finalizing behavior changes, run `npm run build`.
+- After each execution, if there is a meaningful next step, include a copy-ready next-step prompt that the user can paste into Codex, with the necessary context.
 
 Correct patch pattern:
 

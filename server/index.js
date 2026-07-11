@@ -2,7 +2,15 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_PROMPTS } from '../src/prompts.js';
-import { db, getMeta, rowToFavorite, rowToProject, rowToPromptConfig, setMeta } from './db.js';
+import {
+  db,
+  getMeta,
+  rowToFavorite,
+  rowToMaterialExtraction,
+  rowToProject,
+  rowToPromptConfig,
+  setMeta,
+} from './db.js';
 
 export const app = express();
 const port = Number(process.env.API_PORT || process.env.PORT || 43128);
@@ -96,6 +104,35 @@ function normalizePromptConfigInput(input = {}) {
   };
 }
 
+function normalizeMaterialExtractionInput(projectId, input = {}, existing = null) {
+  const now = nowIso();
+  const analysisResults = input.analysisResults && typeof input.analysisResults === 'object'
+    ? input.analysisResults
+    : {};
+  const trackAnalysis = input.trackAnalysis && typeof input.trackAnalysis === 'object'
+    ? input.trackAnalysis
+    : null;
+  const extractionSummary = input.extractionSummary && typeof input.extractionSummary === 'object'
+    ? input.extractionSummary
+    : null;
+  const totalAssets = Number(input.totalAssets);
+
+  return {
+    projectId,
+    sourceTitle: String(input.sourceTitle || '').trim(),
+    sourceText: String(input.sourceText || ''),
+    trackAnalysis,
+    confirmedTrack: String(input.confirmedTrack || '').trim(),
+    analysisResults,
+    extractionSummary,
+    totalAssets: Number.isFinite(totalAssets)
+      ? Math.max(0, Math.trunc(totalAssets))
+      : Object.values(analysisResults).reduce((sum, records) => sum + (Array.isArray(records) ? records.length : 0), 0),
+    createdAt: existing?.created_at || now,
+    updatedAt: input.updatedAt || now,
+  };
+}
+
 function listProjects() {
   return db
     .prepare('SELECT * FROM projects ORDER BY datetime(updated_at) DESC')
@@ -184,6 +221,49 @@ function upsertPromptConfig(promptConfig) {
       temperature = excluded.temperature,
       updated_at = excluded.updated_at
   `).run(promptConfig);
+}
+
+function upsertMaterialExtraction(extraction) {
+  db.prepare(`
+    INSERT INTO material_extractions (
+      project_id,
+      source_title,
+      source_text,
+      track_analysis_json,
+      confirmed_track,
+      analysis_results_json,
+      extraction_summary_json,
+      total_assets,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      @projectId,
+      @sourceTitle,
+      @sourceText,
+      @trackAnalysisJson,
+      @confirmedTrack,
+      @analysisResultsJson,
+      @extractionSummaryJson,
+      @totalAssets,
+      @createdAt,
+      @updatedAt
+    )
+    ON CONFLICT(project_id) DO UPDATE SET
+      source_title = excluded.source_title,
+      source_text = excluded.source_text,
+      track_analysis_json = excluded.track_analysis_json,
+      confirmed_track = excluded.confirmed_track,
+      analysis_results_json = excluded.analysis_results_json,
+      extraction_summary_json = excluded.extraction_summary_json,
+      total_assets = excluded.total_assets,
+      updated_at = excluded.updated_at
+  `).run({
+    ...extraction,
+    trackAnalysisJson: extraction.trackAnalysis ? JSON.stringify(extraction.trackAnalysis) : null,
+    analysisResultsJson: JSON.stringify(extraction.analysisResults || {}),
+    extractionSummaryJson: extraction.extractionSummary ? JSON.stringify(extraction.extractionSummary) : null,
+  });
 }
 
 function resetPromptConfigsToDefaults() {
@@ -326,6 +406,41 @@ app.patch('/api/projects/:id', (request, response) => {
   };
   upsertProject(project);
   response.json(rowToProject(db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id)));
+});
+
+app.get('/api/projects/:id/material-extraction', (request, response) => {
+  const project = db.prepare('SELECT 1 FROM projects WHERE id = ?').get(request.params.id);
+  if (!project) {
+    response.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const row = db.prepare('SELECT * FROM material_extractions WHERE project_id = ?').get(request.params.id);
+  response.json(row ? rowToMaterialExtraction(row) : null);
+});
+
+app.put('/api/projects/:id/material-extraction', (request, response) => {
+  const project = db.prepare('SELECT 1 FROM projects WHERE id = ?').get(request.params.id);
+  if (!project) {
+    response.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const existing = db.prepare('SELECT * FROM material_extractions WHERE project_id = ?').get(request.params.id);
+  const extraction = normalizeMaterialExtractionInput(request.params.id, request.body, existing);
+  upsertMaterialExtraction(extraction);
+  response.json(rowToMaterialExtraction(db.prepare('SELECT * FROM material_extractions WHERE project_id = ?').get(request.params.id)));
+});
+
+app.delete('/api/projects/:id/material-extraction', (request, response) => {
+  const project = db.prepare('SELECT 1 FROM projects WHERE id = ?').get(request.params.id);
+  if (!project) {
+    response.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  db.prepare('DELETE FROM material_extractions WHERE project_id = ?').run(request.params.id);
+  response.status(204).end();
 });
 
 app.delete('/api/projects/:id', (request, response) => {

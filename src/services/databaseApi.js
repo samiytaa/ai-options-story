@@ -70,6 +70,23 @@ export function deleteProjectRecord(projectId) {
   });
 }
 
+export function fetchMaterialExtractionRecord(projectId) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-extraction`);
+}
+
+export function saveMaterialExtractionRecord(projectId, payload) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-extraction`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteMaterialExtractionRecord(projectId) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-extraction`, {
+    method: 'DELETE',
+  });
+}
+
 export function saveActiveProjectRecord(projectId) {
   return requestJson('/api/active-project', {
     method: 'PUT',

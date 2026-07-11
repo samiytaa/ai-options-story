@@ -96,6 +96,10 @@ export function useStoryFlow(deps) {
     return automationSettings?.[key] !== false;
   }
 
+  function shouldGenerateBodyBeforeChoices() {
+    return automationEnabled('generateBodyBeforeChoices');
+  }
+
   function setPendingPlotGeneration(value) {
     pendingPlotGeneration = value;
     setValue(pendingPlotGenerationAvailable, Boolean(value));
@@ -471,6 +475,7 @@ export function useStoryFlow(deps) {
   function syncCurrentPlotPointerFromBlocks() {
     const latestPlotIndex = getLatestPlotIndexForChapter(state.currentChapter);
     if (!latestPlotIndex) return;
+    if (latestPlotIndex < state.currentPlotPointIndex + 1 && state.plotPointContents[state.currentPlotPointIndex]) return;
 
     state.plotPointContents = getPlotContentsForChapter(state.currentChapter);
     state.currentPlotPointIndex = latestPlotIndex - 1;
@@ -763,6 +768,21 @@ export function useStoryFlow(deps) {
     }
   }
 
+  async function continueWithChoiceSeed(chosenOptionText, sourceChoice = null) {
+    state.plotPointContents[state.currentPlotPointIndex] = `（基于已选分支继续生成选项）\n${chosenOptionText}`;
+    state.currentOptions = [];
+    setPendingPlotGeneration(null);
+    appendChoiceRecordBlock(`choice-record-ch${state.currentChapter}-plot${state.currentPlotPointIndex + 1}-seed`, sourceChoice);
+    clearChoiceSelection();
+    setStage(`ch${state.currentChapter}`);
+
+    if (automationEnabled('autoGenerateChoices')) {
+      await generateOptionsForCurrentPlotPoint();
+    } else {
+      notify('已记录选项，已跳过正文生成，可手动生成下一组选项', 'info');
+    }
+  }
+
   async function generateHooks() {
     updateLoading('正在生成章节钩子...');
     clearChoiceSelection();
@@ -854,7 +874,9 @@ export function useStoryFlow(deps) {
       }
 
       state.currentPlotPointIndex += 1;
-      if (automationEnabled('autoGeneratePlot')) {
+      if (!shouldGenerateBodyBeforeChoices()) {
+        await continueWithChoiceSeed(chosenOptionText, sourceChoice);
+      } else if (automationEnabled('autoGeneratePlot')) {
         await generateNextPlotPoint(chosenOptionText, sourceChoice);
       } else {
         setPendingPlotGeneration({
@@ -904,11 +926,14 @@ export function useStoryFlow(deps) {
       state.currentOptions = [];
       clearChoiceSelection();
       notify(`进入第${state.currentChapter}章！`, 'success');
-      if (automationEnabled('autoGeneratePlot')) {
-        await generateNextPlotPoint(`（承接上一章钩子与剧情走向：${selectedHookPrompt}）`, sourceChoice);
+      const selectedHookSeed = `（承接上一章钩子与剧情走向：${selectedHookPrompt}）`;
+      if (!shouldGenerateBodyBeforeChoices()) {
+        await continueWithChoiceSeed(selectedHookSeed, sourceChoice);
+      } else if (automationEnabled('autoGeneratePlot')) {
+        await generateNextPlotPoint(selectedHookSeed, sourceChoice);
       } else {
         setPendingPlotGeneration({
-          chosenOptionText: `（承接上一章钩子与剧情走向：${selectedHookPrompt}）`,
+          chosenOptionText: selectedHookSeed,
           sourceChoice,
         });
         setStage(`ch${state.currentChapter}`);

@@ -8,6 +8,7 @@
     "server": "node server/index.js",
     "dev:local": "node server/dev.js",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
+    "verify:track-analysis": "node scripts/verify-track-analysis.mjs",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0"
   },

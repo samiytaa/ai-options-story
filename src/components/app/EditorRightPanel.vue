@@ -19,6 +19,7 @@ const props = defineProps({
     default: () => ({
       autoGeneratePlot: true,
       autoGenerateChoices: true,
+      generateBodyBeforeChoices: true,
     }),
   },
   copySelectedChoicesWithBody: {
@@ -96,6 +97,13 @@ function updatePromptAutomationSetting(key, event) {
               @change="updatePromptAutomationSetting('autoGenerateChoices', $event)" />
             <span class="automation-switch-body">
               <span class="automation-switch-title">自动生成选项</span>
+            </span>
+          </label>
+          <label class="automation-switch-card">
+            <input :checked="promptAutomationSettings.generateBodyBeforeChoices !== false" type="checkbox"
+              @change="updatePromptAutomationSetting('generateBodyBeforeChoices', $event)" />
+            <span class="automation-switch-body">
+              <span class="automation-switch-title">选项前生成正文</span>
             </span>
           </label>
         </div>

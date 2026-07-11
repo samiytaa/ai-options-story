@@ -42,6 +42,20 @@ db.exec(`
     temperature REAL NOT NULL DEFAULT 0.85,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS material_extractions (
+    project_id TEXT PRIMARY KEY,
+    source_title TEXT NOT NULL DEFAULT '',
+    source_text TEXT NOT NULL DEFAULT '',
+    track_analysis_json TEXT,
+    confirmed_track TEXT NOT NULL DEFAULT '',
+    analysis_results_json TEXT NOT NULL DEFAULT '{}',
+    extraction_summary_json TEXT,
+    total_assets INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
 `);
 
 const favoriteColumns = db.prepare('PRAGMA table_info(favorites)').all().map((column) => column.name);
@@ -52,6 +66,14 @@ if (!favoriteColumns.includes('payload_json')) {
 const promptConfigColumns = db.prepare('PRAGMA table_info(prompt_configs)').all().map((column) => column.name);
 if (!promptConfigColumns.includes('temperature')) {
   db.prepare('ALTER TABLE prompt_configs ADD COLUMN temperature REAL NOT NULL DEFAULT 0.85').run();
+}
+
+const materialExtractionColumns = db.prepare('PRAGMA table_info(material_extractions)').all().map((column) => column.name);
+if (!materialExtractionColumns.includes('track_analysis_json')) {
+  db.prepare('ALTER TABLE material_extractions ADD COLUMN track_analysis_json TEXT').run();
+}
+if (!materialExtractionColumns.includes('confirmed_track')) {
+  db.prepare("ALTER TABLE material_extractions ADD COLUMN confirmed_track TEXT NOT NULL DEFAULT ''").run();
 }
 
 function parseJson(value, fallback = null) {
@@ -93,6 +115,21 @@ export function rowToPromptConfig(row) {
     systemPrompt: row.system_prompt,
     userPrompt: row.user_prompt,
     temperature: row.temperature,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function rowToMaterialExtraction(row) {
+  return {
+    projectId: row.project_id,
+    sourceTitle: row.source_title,
+    sourceText: row.source_text,
+    trackAnalysis: parseJson(row.track_analysis_json, null),
+    confirmedTrack: row.confirmed_track || '',
+    analysisResults: parseJson(row.analysis_results_json, {}),
+    extractionSummary: parseJson(row.extraction_summary_json, null),
+    totalAssets: row.total_assets,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }

@@ -8,6 +8,7 @@ import EditorLeftPanel from './components/app/EditorLeftPanel.vue';
 import EditorRightPanel from './components/app/EditorRightPanel.vue';
 import StoryStageWorkspace from './components/app/StoryStageWorkspace.vue';
 import ProjectHome from './components/app/ProjectHome.vue';
+import MaterialExtractorPage from './features/materialExtractor/MaterialExtractorPage.vue';
 import FavoriteFormModal from './components/app/FavoriteFormModal.vue';
 import FavoritesLibraryModal from './components/app/FavoritesLibraryModal.vue';
 import ManualBrainholeModal from './components/app/ManualBrainholeModal.vue';
@@ -77,11 +78,13 @@ function loadPromptAutomationSettings() {
     return {
       autoGeneratePlot: saved.autoGeneratePlot !== false,
       autoGenerateChoices: saved.autoGenerateChoices !== false,
+      generateBodyBeforeChoices: saved.generateBodyBeforeChoices !== false,
     };
   } catch {
     return {
       autoGeneratePlot: true,
       autoGenerateChoices: true,
+      generateBodyBeforeChoices: true,
     };
   }
 }
@@ -141,6 +144,7 @@ const assistantEditing = ref(false);
 const assistantEditingMessageId = ref(null);
 const assistantEditingMessageContent = ref('');
 const pendingPlotGenerationAvailable = ref(false);
+const activeStandaloneView = ref('');
 
 const selectedStoryBlock = computed(() => storyBlocks.value.find((block) => block.id === selectedStoryBlockId.value) || null);
 const canCopyCurrentBody = computed(() => storyBlocks.value.some((block) => {
@@ -164,6 +168,11 @@ function completedPlotBlockCountForChapter(chapterNum) {
   }).length;
 }
 
+function completedPlotPointCountForChapter(chapterNum) {
+  const chapter = state.chapters.find((item) => item.chapterNum === chapterNum);
+  return Math.max(completedPlotBlockCountForChapter(chapterNum), chapter?.plotPoints?.length || 0);
+}
+
 function hasLatestPlotBlockContentForChapter(chapterNum) {
   return storyBlocks.value.some((block) => {
     const match = String(block.id || '').match(/^plot-(\d+)-(\d+)$/);
@@ -171,10 +180,14 @@ function hasLatestPlotBlockContentForChapter(chapterNum) {
   });
 }
 
+function hasCurrentPlotSeed() {
+  return Boolean(state.plotPointContents[state.currentPlotPointIndex]?.trim());
+}
+
 const pendingChoiceGenerationLabel = computed(() => {
   const chapter = state.chapters.find((item) => item.chapterNum === state.currentChapter);
   if (state.currentChapter >= 4 && chapter?.hookChosen !== null && !state.bigHooks.length) return '生成大钩子与剧情走向';
-  if (completedPlotBlockCountForChapter(state.currentChapter) >= 4 && !state.currentHooks.length) return '生成下一章的4个章节钩子';
+  if (completedPlotPointCountForChapter(state.currentChapter) >= 4 && !state.currentHooks.length) return '生成下一章的4个章节钩子';
   return '生成剧情选项';
 });
 const pendingChoiceGenerationAvailable = computed(() => {
@@ -184,8 +197,8 @@ const pendingChoiceGenerationAvailable = computed(() => {
 
   const chapter = state.chapters.find((item) => item.chapterNum === state.currentChapter);
   if (state.currentChapter >= 4 && chapter?.hookChosen !== null) return true;
-  if (completedPlotBlockCountForChapter(state.currentChapter) >= 4 && chapter?.hookChosen === null) return true;
-  return hasLatestPlotBlockContentForChapter(state.currentChapter);
+  if (completedPlotPointCountForChapter(state.currentChapter) >= 4 && chapter?.hookChosen === null) return true;
+  return hasLatestPlotBlockContentForChapter(state.currentChapter) || hasCurrentPlotSeed();
 });
 
 function startEditProjectName(project) {
@@ -229,6 +242,14 @@ function pushToast(message, type = 'info') {
   window.setTimeout(() => {
     toasts.value = toasts.value.filter((toast) => toast.id !== id);
   }, 3000);
+}
+
+function openMaterialExtractor() {
+  activeStandaloneView.value = 'materialExtractor';
+}
+
+function closeMaterialExtractor() {
+  activeStandaloneView.value = '';
 }
 
 function setLoading(message = '') {
@@ -776,6 +797,24 @@ async function finalWriting() {
   await persistProjectEditAfter(finalWritingToState);
 }
 
+function updateFinalWorkDraft(blockId, content) {
+  if (blockId !== 'final-work') return;
+  updateStoryBlockContent(blockId, content);
+  syncEditedBlockToState(blockId, content);
+}
+
+async function saveFinalWork(blockId) {
+  if (blockId !== 'final-work') return;
+  if (!state.finalWork.trim()) {
+    pushToast('最终正文不能为空', 'error');
+    return;
+  }
+
+  updateStoryBlockContent(blockId, state.finalWork);
+  await saveCurrentProjectSnapshot();
+  pushToast('最终正文已保存', 'success');
+}
+
 async function resetAll() {
   resetAllToState();
   await saveCurrentProjectSnapshot();
@@ -787,7 +826,7 @@ async function generatePendingChoices() {
     await generateBigHooks();
     return;
   }
-  if (completedPlotBlockCountForChapter(state.currentChapter) >= 4 && !state.currentHooks.length) {
+  if (completedPlotPointCountForChapter(state.currentChapter) >= 4 && !state.currentHooks.length) {
     await generateHooks();
     return;
   }
@@ -1186,7 +1225,14 @@ void initializeDatabaseState();
 </script>
 
 <template>
-  <div class="app-shell">
+  <MaterialExtractorPage
+    v-if="activeStandaloneView === 'materialExtractor'"
+    :active-project-id="activeProjectId"
+    :active-project-name="activeProjectName"
+    :ai-config="state.aiConfig"
+    @close="closeMaterialExtractor"
+  />
+  <div v-else class="app-shell">
     <header class="app-header">
       <button class="logo" type="button" title="返回首页" aria-label="返回首页" @click="backToProjectList">
         <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1197,6 +1243,9 @@ void initializeDatabaseState();
       <StageIndicator v-if="isEditorOpen" :stage="state.stage" :active-stage="activeStageView"
         @navigate="navigateStageView" />
       <div class="header-actions">
+        <button class="btn btn-secondary btn-sm" type="button" @click="openMaterialExtractor">
+          素材抽取
+        </button>
         <button class="btn btn-secondary btn-sm" type="button" @click="showFavoritesModal = true">
           收藏库
         </button>
@@ -1327,6 +1376,8 @@ void initializeDatabaseState();
           @delete-plot-block="deletePlotBlock"
           @regenerate-plot-block-result="regeneratePlotBlockResult"
           @update:editing-content="editingContent = $event"
+          @update-final-work-draft="updateFinalWorkDraft"
+          @save-final-work="saveFinalWork"
           @save-edit-block="saveEditBlock"
           @cancel-edit-block="cancelEditBlock"
           @update:story-start="state.storyStart = $event"

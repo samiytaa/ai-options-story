@@ -1,7 +1,8 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ChoiceList from '../ChoiceList.vue';
 import BrainholeOptionsStage from './BrainholeOptionsStage.vue';
+import FinalWorkEditor from './FinalWorkEditor.vue';
 
 const props = defineProps({
   activeStageViewLabel: {
@@ -144,6 +145,8 @@ const emit = defineEmits([
   'delete-plot-block',
   'regenerate-plot-block-result',
   'update:editingContent',
+  'update-final-work-draft',
+  'save-final-work',
   'save-edit-block',
   'cancel-edit-block',
   'update:storyStart',
@@ -187,6 +190,10 @@ const showEmptyState = computed(
     !props.showStylePanel &&
     !props.showFinalActions,
 );
+const showManualPendingChoiceModal = ref(false);
+const manualPendingChoiceText = ref('');
+const manualPendingChoiceResult = ref('');
+const canAddManualPendingChoice = computed(() => props.pendingChoiceGenerationLabel === '生成剧情选项');
 
 function updateEditingContent(event) {
   emit('update:editingContent', event.target.value);
@@ -202,6 +209,29 @@ function updateStyleInput(event) {
 
 function updateCustomPromptInstruction(event) {
   emit('update:customPromptInstruction', event.target.value);
+}
+
+function openManualPendingChoiceModal() {
+  manualPendingChoiceText.value = '';
+  manualPendingChoiceResult.value = '';
+  showManualPendingChoiceModal.value = true;
+}
+
+function closeManualPendingChoiceModal() {
+  showManualPendingChoiceModal.value = false;
+  manualPendingChoiceText.value = '';
+  manualPendingChoiceResult.value = '';
+}
+
+function saveManualPendingChoice() {
+  const option = manualPendingChoiceText.value.trim();
+  if (!option) return;
+
+  emit('add-current-choice-option', {
+    option,
+    result: manualPendingChoiceResult.value.trim(),
+  }, 'option');
+  closeManualPendingChoiceModal();
 }
 
 function setQuickStyle(style) {
@@ -266,7 +296,7 @@ function choicePanelClass(type) {
 }
 
 function showToolbarWordCount(block) {
-  return block?.id === 'guide' || block?.id === 'final-work';
+  return block?.id === 'guide';
 }
 
 function showInlineWordCount(block) {
@@ -332,7 +362,7 @@ function showInlineWordCount(block) {
           @click="emit('favorite-story-block', block)">
           收藏
         </button>
-        <button v-if="editingBlockId !== block.id" class="btn btn-secondary btn-sm" type="button" :disabled="isLoading"
+        <button v-if="block.id !== 'final-work' && editingBlockId !== block.id" class="btn btn-secondary btn-sm" type="button" :disabled="isLoading"
           @click="emit('start-edit-block', block)">
           编辑
         </button>
@@ -358,6 +388,16 @@ function showInlineWordCount(block) {
             取消
           </button>
         </div>
+      </template>
+      <template v-else-if="block.id === 'final-work'">
+        <FinalWorkEditor
+          :content="block.content"
+          :is-loading="isLoading"
+          @update:content="emit('update-final-work-draft', block.id, $event)"
+          @save="emit('save-final-work', block.id)"
+          @copy="emit('copy-final-work')"
+          @download="emit('download-final-work')"
+        />
       </template>
       <template v-else-if="block.id === 'brainhole-options'">
         <BrainholeOptionsStage :story-start="storyStart" :wind-vane-file="windVaneFile" :is-loading="isLoading"
@@ -464,14 +504,70 @@ function showInlineWordCount(block) {
         <div class="section-title">为当前剧情点补充分支与走向</div>
       </div>
     </div>
-    <button class="btn btn-secondary" type="button" :disabled="isLoading" @click="emit('generate-pending-choices')">
-      {{ pendingChoiceGenerationLabel }}
-    </button>
+    <div class="btn-row pending-choice-action-row">
+      <button class="btn btn-secondary" type="button" :disabled="isLoading" @click="emit('generate-pending-choices')">
+        {{ pendingChoiceGenerationLabel }}
+      </button>
+      <button
+        v-if="canAddManualPendingChoice"
+        class="btn btn-secondary"
+        type="button"
+        :disabled="isLoading"
+        @click="openManualPendingChoiceModal"
+      >
+        手动添加选项
+      </button>
+    </div>
     <section class="custom-prompt-panel" aria-label="本次额外生成要求">
       <label for="custom-prompt-instruction-choice">本次额外要求</label>
       <textarea id="custom-prompt-instruction-choice" :value="customPromptInstruction" rows="3"
         placeholder="例如：给出更激进/更保守/更反转的走向，选项之间差异要更大。会追加到当前生成按钮的提示词后。" :disabled="isLoading"
         @input="updateCustomPromptInstruction" />
+    </section>
+  </div>
+
+  <div v-if="showManualPendingChoiceModal" class="modal-backdrop choice-add-backdrop" @click.self="closeManualPendingChoiceModal">
+    <section class="settings-modal choice-add-modal" role="dialog" aria-modal="true" aria-labelledby="manual-pending-choice-title">
+      <header class="settings-modal-header">
+        <div>
+          <h2 id="manual-pending-choice-title">手动添加剧情选项</h2>
+          <p>选项必填，结果可以留空。保存后会进入当前剧情选项池。</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" :disabled="isLoading" @click="closeManualPendingChoiceModal">
+          关闭
+        </button>
+      </header>
+
+      <div class="settings-modal-body">
+        <div class="choice-add-form">
+          <label for="manual-pending-choice-option">选项</label>
+          <textarea
+            id="manual-pending-choice-option"
+            v-model="manualPendingChoiceText"
+            class="choice-add-textarea"
+            placeholder="输入角色可以采取的行为或选择"
+            :disabled="isLoading"
+          />
+
+          <label for="manual-pending-choice-result">结果</label>
+          <textarea
+            id="manual-pending-choice-result"
+            v-model="manualPendingChoiceResult"
+            class="choice-add-textarea"
+            placeholder="输入选择后推动剧情的结果，可留空"
+            :disabled="isLoading"
+          />
+        </div>
+      </div>
+
+      <footer class="settings-modal-footer">
+        <button class="btn btn-secondary btn-sm" type="button" :disabled="isLoading" @click="closeManualPendingChoiceModal">
+          取消
+        </button>
+        <button class="btn btn-primary btn-sm" type="button" :disabled="isLoading || !manualPendingChoiceText.trim()" @click="saveManualPendingChoice">
+          保存
+        </button>
+      </footer>
     </section>
   </div>
 
