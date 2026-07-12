@@ -34,6 +34,7 @@ import {
 } from './favorites';
 import {
   createEmptyProject,
+  normalizeProjectSnapshot,
   normalizeImportDataPackage,
   normalizeProject,
 } from './projects';
@@ -178,17 +179,18 @@ export function useProjectLibrary(deps) {
 
   function restoreProjectSnapshot(project) {
     const retainedApiConfig = normalizeApiConfig(state.aiConfig);
+    const normalizedSnapshot = normalizeProjectSnapshot(project?.snapshot);
     const nextState = {
       ...createInitialState(retainedApiConfig),
-      ...(project?.snapshot?.state || {}),
+      ...(normalizedSnapshot?.state || {}),
       aiConfig: retainedApiConfig,
     };
 
     isRestoringProject = true;
     Object.assign(state, nextState);
-    storyBlocks.value = safeJsonClone(project?.snapshot?.storyBlocks || []);
-    windVaneFile.value = project?.snapshot?.windVaneFile ? safeJsonClone(project.snapshot.windVaneFile) : null;
-    styleInput.value = project?.snapshot?.styleInput || '';
+    storyBlocks.value = safeJsonClone(normalizedSnapshot?.storyBlocks || []);
+    windVaneFile.value = normalizedSnapshot?.windVaneFile ? safeJsonClone(normalizedSnapshot.windVaneFile) : null;
+    styleInput.value = normalizedSnapshot?.styleInput || '';
     activeStageView.value = normalizeStageView(nextState.stage);
     resetChoiceSelection();
     resetEditing();

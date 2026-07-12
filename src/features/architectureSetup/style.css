@@ -1,0 +1,234 @@
+.architecture-stage {
+  display: grid;
+  gap: 18px;
+}
+
+.architecture-stage-panel {
+  padding: 18px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.architecture-stage-intro {
+  display: grid;
+  gap: 14px;
+}
+
+.architecture-stage-intro-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.architecture-stage-intro-copy p {
+  margin: 0;
+  color: var(--text2);
+}
+
+.architecture-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.architecture-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.architecture-context-card {
+  padding: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: 140px;
+}
+
+.architecture-context-card p,
+.architecture-field-hint,
+.architecture-actor-hint,
+.architecture-empty,
+.architecture-errors li {
+  color: var(--text2);
+}
+
+.architecture-context-card p,
+.architecture-field-hint,
+.architecture-actor-hint,
+.architecture-empty {
+  margin: 0;
+}
+
+.architecture-form-section {
+  display: grid;
+  gap: 14px;
+}
+
+.architecture-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.architecture-field {
+  display: grid;
+  gap: 8px;
+}
+
+.architecture-field-wide {
+  grid-column: 1 / -1;
+}
+
+.architecture-field label,
+.architecture-actor-card label {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.architecture-field textarea,
+.architecture-field input,
+.architecture-actor-card textarea,
+.architecture-actor-card input,
+.architecture-actor-card select {
+  width: 100%;
+}
+
+.architecture-actor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.architecture-actor-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.architecture-actor-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.architecture-actor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.architecture-actor-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.architecture-actor-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.architecture-actor-card .architecture-field {
+  gap: 5px;
+}
+
+.architecture-actor-card .architecture-field label {
+  font-size: 0.84rem;
+  letter-spacing: 0.01em;
+}
+
+.architecture-actor-card .architecture-field input,
+.architecture-actor-card .architecture-field select,
+.architecture-actor-card .architecture-field textarea {
+  padding: 8px 10px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.architecture-actor-card .architecture-field textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.architecture-field-actor-compact textarea {
+  min-height: 64px;
+}
+
+.architecture-field-actor-summary textarea {
+  min-height: 68px;
+}
+
+.architecture-validation {
+  display: grid;
+  gap: 10px;
+}
+
+.architecture-errors {
+  margin: 0;
+  padding-left: 20px;
+}
+
+@media (max-width: 960px) {
+  .architecture-reference-grid,
+  .architecture-context-grid,
+  .architecture-form-grid,
+  .architecture-actor-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .architecture-actor-toolbar {
+    align-items: stretch;
+  }
+}
+
+@media (min-width: 961px) and (max-width: 1180px) {
+  .architecture-actor-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.architecture-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.architecture-reference-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.architecture-reference-list {
+  display: grid;
+  gap: 8px;
+}
+
+.architecture-reference-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.architecture-reference-item p {
+  margin: 0;
+  color: var(--text2);
+}
+
+.architecture-reference-title {
+  font-weight: 700;
+}
+
+.architecture-reference-panel-result {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}

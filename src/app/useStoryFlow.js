@@ -2,6 +2,7 @@ import { callAiChat } from '../services/aiClient';
 import { normalizeApiConfig } from '../services/apiConfig';
 import {
   buildContextSummary,
+  cloneDnaReferenceItems,
   createInitialState,
   ensureChapter,
   formatChoiceForDisplay,
@@ -24,6 +25,20 @@ import {
   buildPromptMessages as buildPromptMessagesFromConfig,
   getPromptConfig as getPromptConfigFromList,
 } from './promptConfig';
+import {
+  buildArchitectureMessages,
+  buildPersonaMessages,
+  normalizeArchitectureResult,
+  normalizePersonaResult,
+} from '../features/architectureSetup/architectureEngine';
+import {
+  createEmptyArchitectureActor,
+  createEmptyArchitecturePlan,
+  normalizeArchitecturePlan,
+  validateArchitectureFields,
+  validatePersonaFields,
+  validateArchitecturePlan,
+} from '../features/architectureSetup/architectureState.js';
 
 function defaultGetValue(refOrValue) {
   return refOrValue && typeof refOrValue === 'object' && 'value' in refOrValue
@@ -145,6 +160,19 @@ export function useStoryFlow(deps) {
     });
   }
 
+  function appendCustomInstructionToMessages(messages) {
+    const instruction = getValue(customPromptInstruction)?.trim();
+    if (!instruction) return messages;
+
+    return messages.map((message, index) => {
+      if (index !== messages.length - 1 || message.role !== 'user') return message;
+      return {
+        ...message,
+        content: `${message.content}\n\n【本次额外生成要求】\n${instruction}`,
+      };
+    });
+  }
+
   async function requestAi(messages, temperature = 0.85) {
     if (injectedRequestAi) return injectedRequestAi(messages, temperature);
     return callAiChat({
@@ -152,6 +180,48 @@ export function useStoryFlow(deps) {
       messages,
       temperature,
     });
+  }
+
+  function captureDnaReferences(target) {
+    const source = Array.isArray(state.dnaAssetReferences?.[target]) ? state.dnaAssetReferences[target] : [];
+    return cloneDnaReferenceItems(source);
+  }
+
+  function captureCombinedDnaReferences(targets = []) {
+    const seen = new Set();
+    const result = [];
+    targets.forEach((target) => {
+      captureDnaReferences(target).forEach((item) => {
+        const key = [item.assetType || '', item.assetId || '', item.label || item.assetName || ''].join('::');
+        if (seen.has(key)) return;
+        seen.add(key);
+        result.push({ ...item });
+      });
+    });
+    return result;
+  }
+
+  function captureAllActiveDnaReferences() {
+    return captureCombinedDnaReferences(['brainhole', 'guide', 'outline']);
+  }
+
+  function resultReferenceDefaults() {
+    return {
+      brainholeOptions: [],
+      guide: [],
+      architecture: [],
+      currentOptions: [],
+      currentHooks: [],
+      currentBigHooks: [],
+    };
+  }
+
+  function setDnaResultReferences(key, items) {
+    state.dnaResultReferences = {
+      ...resultReferenceDefaults(),
+      ...(state.dnaResultReferences || {}),
+      [key]: cloneDnaReferenceItems(items),
+    };
   }
 
   function setBrainholeBlock(content) {
@@ -184,6 +254,7 @@ export function useStoryFlow(deps) {
     state.brainhole = '';
     state.selectedBrainholeIndex = null;
     state.guide = '';
+    state.architecturePlan = createEmptyArchitecturePlan();
     state.chapters = [];
     state.currentOptions = [];
     state.currentHooks = [];
@@ -313,7 +384,7 @@ export function useStoryFlow(deps) {
     notify('已选项', 'success');
   }
 
-  function setGuideAndFirstPlotBlocks(guideContent, firstPlotContent) {
+  function setGuideBlock(guideContent) {
     setValue(storyBlocks, [
       {
         id: 'guide',
@@ -323,17 +394,10 @@ export function useStoryFlow(deps) {
         blockClass: 'guide-block',
         divider: '',
       },
-      {
-        id: 'plot-1-1',
-        title: '',
-        content: firstPlotContent,
-        blockClass: '',
-        divider: '▼ 第一章 · 剧情点 1/4 ▼',
-      },
     ]);
   }
 
-  function appendPlotBlock(chapterNum, plotIndex, content, sourceChoice = null) {
+  function appendPlotBlock(chapterNum, plotIndex, content, sourceChoice = null, dnaReferenceItems = []) {
     getValue(storyBlocks).push({
       id: `plot-${chapterNum}-${plotIndex}`,
       title: '',
@@ -341,6 +405,7 @@ export function useStoryFlow(deps) {
       blockClass: '',
       divider: `▼ 第${chapterNum}章 · 剧情点 ${plotIndex}/4 ▼`,
       sourceChoice,
+      dnaReferenceItems: cloneDnaReferenceItems(dnaReferenceItems),
     });
   }
 
@@ -636,6 +701,7 @@ export function useStoryFlow(deps) {
         clearBrainholeContinuation();
       }
       setBrainholeOptionsBlock();
+      setDnaResultReferences('brainholeOptions', captureDnaReferences('brainhole'));
       notify(previousOptionCount ? '新脑洞已追加到候选末尾！' : '脑洞选项生成成功！', 'success');
     } catch (error) {
       setStage('setup');
@@ -645,7 +711,7 @@ export function useStoryFlow(deps) {
     }
   }
 
-  async function generateGuideAndFirstPlot() {
+  async function generateGuide() {
     if (!hasActiveProject()) return;
 
     if (!state.brainhole.trim()) {
@@ -653,25 +719,25 @@ export function useStoryFlow(deps) {
       return;
     }
 
-    updateLoading('正在生成导语和第一个剧情点...');
+    updateLoading('正在生成导语...');
     setStage('guide');
 
     try {
-      const promptConfig = getPromptConfig('guideAndFirstPlot');
+      const promptConfig = getPromptConfig('guide');
       const result = await requestAi(
-        buildPromptMessagesWithCustomInstruction('guideAndFirstPlot', {
+        buildPromptMessagesWithCustomInstruction('guide', {
           contextSummary: buildContextSummary(state),
         }),
         promptConfig.temperature,
       );
 
-      const guideMatch = result.match(/【导语】\s*([\s\S]*?)【第一个剧情点】/);
-      const plotMatch = result.match(/【第一个剧情点】\s*([\s\S]*?)$/);
-
-      const guideContent = guideMatch ? guideMatch[1].trim() : result.slice(0, 300).trim();
-      const firstPlotContent = (plotMatch ? plotMatch[1].trim() : '') || '（剧情点内容）';
+      const guideContent = String(result || '').trim();
 
       state.guide = guideContent;
+      state.architecturePlan = {
+        ...createEmptyArchitecturePlan(),
+        guideReferenceNotes: guideContent,
+      };
       state.currentChapter = 1;
       state.currentPlotPointIndex = 0;
       state.plotPointContents = [firstPlotContent];
@@ -683,21 +749,234 @@ export function useStoryFlow(deps) {
       state.bigHookChosen = null;
       state.finalStyle = '';
       state.finalWork = '';
-      setGuideAndFirstPlotBlocks(guideContent, firstPlotContent);
-
-      if (automationEnabled('autoGenerateChoices')) {
-        await generateOptionsForCurrentPlotPoint();
-      }
-      setStage('ch1');
-      notify(
-        automationEnabled('autoGenerateChoices') ? '导语生成成功！请选择剧情发展方向' : '导语生成成功，已暂停自动生成选项',
-        'success',
-      );
+      setGuideBlock(guideContent);
+      setDnaResultReferences('guide', captureDnaReferences('guide'));
+      setStage('architecture_setup');
+      notify('导语生成成功，请先完成“生成架构”阶段', 'success');
     } catch (error) {
       notify(`生成导语失败：${error.message}`, 'error');
     } finally {
       updateLoading();
     }
+  }
+
+  async function generateFirstPlotPoint() {
+    if (!hasActiveProject()) return;
+    if (!state.guide.trim()) {
+      notify('请先生成导语', 'error');
+      return;
+    }
+
+    const validation = validateArchitecturePlan(state.architecturePlan);
+    if (!validation.isValid) {
+      notify(validation.errors[0], 'error');
+      return;
+    }
+
+    updateLoading('正在生成第一个剧情点...');
+
+    try {
+      const promptConfig = getPromptConfig('firstPlotPoint');
+      const result = await requestAi(
+        buildPromptMessagesWithCustomInstruction('firstPlotPoint', {
+          contextSummary: buildContextSummary({
+            ...state,
+            architecturePlan: validation.normalized,
+          }),
+        }),
+        promptConfig.temperature,
+      );
+
+      state.architecturePlan = validation.normalized;
+      state.currentChapter = 1;
+      state.currentPlotPointIndex = 0;
+      state.plotPointContents = [String(result || '').trim() || '（剧情点内容）'];
+      state.chapters = [];
+      state.currentOptions = [];
+      state.currentHooks = [];
+      state.bigHooks = [];
+      state.bigHookChosen = null;
+      state.finalStyle = '';
+      state.finalWork = '';
+      setGuideBlock(state.guide);
+      appendPlotBlock(1, 1, state.plotPointContents[0]);
+      setStage('ch1');
+
+      if (automationEnabled('autoGenerateChoices')) {
+        await generateOptionsForCurrentPlotPoint();
+        notify('第一个剧情点已生成，并已进入第一章', 'success');
+        return;
+      }
+
+      notify('第一个剧情点已生成，并已进入第一章', 'success');
+    } catch (error) {
+      notify(`生成第一个剧情点失败：${error.message}`, 'error');
+    } finally {
+      updateLoading();
+    }
+  }
+
+  function updateArchitectureField(field, value) {
+    const plan = normalizeArchitecturePlan(state.architecturePlan);
+    if (!(field in plan) || field === 'actors' || field === 'guideReferenceNotes' || field === 'outlineReferenceNotes') return;
+    state.architecturePlan = {
+      ...plan,
+      [field]: String(value || ''),
+    };
+  }
+
+  function withArchitectureReferenceNotes(plan = state.architecturePlan) {
+    return {
+      ...normalizeArchitecturePlan(plan),
+      guideReferenceNotes: state.guide.trim(),
+    };
+  }
+
+  function addArchitectureActor() {
+    const plan = normalizeArchitecturePlan(state.architecturePlan);
+    if (plan.actors.length >= 5) {
+      notify('核心演员最多 5 个', 'error');
+      return;
+    }
+    state.architecturePlan = {
+      ...plan,
+      actors: [...plan.actors, createEmptyArchitectureActor()],
+    };
+    notify('已新增核心演员', 'success');
+  }
+
+  function removeArchitectureActor(index) {
+    const plan = normalizeArchitecturePlan(state.architecturePlan);
+    if (!plan.actors[index]) return;
+    if (plan.actors.length <= 3) {
+      notify('核心演员至少保留 3 个', 'error');
+      return;
+    }
+    plan.actors.splice(index, 1);
+    state.architecturePlan = {
+      ...plan,
+      actors: [...plan.actors],
+    };
+    notify('已删除核心演员', 'success');
+  }
+
+  function updateArchitectureActorField(index, field, value) {
+    const plan = normalizeArchitecturePlan(state.architecturePlan);
+    if (!plan.actors[index] || !(field in plan.actors[index])) return;
+    plan.actors[index] = {
+      ...plan.actors[index],
+      [field]: String(value || ''),
+    };
+    state.architecturePlan = {
+      ...plan,
+      actors: [...plan.actors],
+    };
+  }
+
+  async function generateArchitecture() {
+    if (!hasActiveProject()) return;
+    if (!state.brainhole.trim()) {
+      notify('请先选定脑洞', 'error');
+      return;
+    }
+    if (!state.guide.trim()) {
+      notify('请先生成导语', 'error');
+      return;
+    }
+
+    updateLoading('正在生成架构...');
+    setStage('architecture_setup');
+
+    try {
+      const result = await requestAi(
+        appendCustomInstructionToMessages(buildArchitectureMessages({
+          selectedBrainhole: state.brainholeOptions[state.selectedBrainholeIndex] || null,
+          brainholeText: state.brainhole,
+          guide: state.guide,
+          architecturePlan: state.architecturePlan,
+        })),
+        0.85,
+      );
+
+      const nextPlan = normalizeArchitectureResult(result);
+      state.architecturePlan = {
+        ...withArchitectureReferenceNotes(state.architecturePlan),
+        ...nextPlan,
+        guideReferenceNotes: state.guide.trim(),
+      };
+      setDnaResultReferences('architecture', captureDnaReferences('outline'));
+      notify('故事架构已生成，请检查后进入人设阶段', 'success');
+    } catch (error) {
+      notify(`生成架构失败：${error.message}`, 'error');
+    } finally {
+      updateLoading();
+    }
+  }
+
+  async function confirmArchitecture() {
+    if (!hasActiveProject()) return;
+
+    const validation = validateArchitectureFields(withArchitectureReferenceNotes());
+    if (!validation.isValid) {
+      notify(validation.errors[0], 'error');
+      return;
+    }
+
+    state.architecturePlan = withArchitectureReferenceNotes(validation.normalized);
+    setStage('persona_setup');
+    notify('故事架构已确认，进入人设阶段', 'success');
+  }
+
+  async function generatePersona() {
+    if (!hasActiveProject()) return;
+
+    const architectureValidation = validateArchitectureFields(withArchitectureReferenceNotes());
+    if (!architectureValidation.isValid) {
+      notify(architectureValidation.errors[0], 'error');
+      return;
+    }
+
+    updateLoading('正在生成人设...');
+    setStage('persona_setup');
+
+    try {
+      const result = await requestAi(
+        appendCustomInstructionToMessages(buildPersonaMessages({
+          selectedBrainhole: state.brainholeOptions[state.selectedBrainholeIndex] || null,
+          brainholeText: state.brainhole,
+          guide: state.guide,
+          architecturePlan: architectureValidation.normalized,
+        })),
+        0.85,
+      );
+
+      state.architecturePlan = {
+        ...withArchitectureReferenceNotes(architectureValidation.normalized),
+        actors: normalizePersonaResult(result),
+      };
+      setDnaResultReferences('architecture', captureDnaReferences('outline'));
+      notify('核心人设已生成，请检查后生成第一个剧情点', 'success');
+    } catch (error) {
+      notify(`生成人设失败：${error.message}`, 'error');
+    } finally {
+      updateLoading();
+    }
+  }
+
+  async function confirmPersona() {
+    if (!hasActiveProject()) return;
+
+    const validation = validatePersonaFields(state.architecturePlan);
+    if (!validation.isValid) {
+      notify(validation.errors[0], 'error');
+      return;
+    }
+
+    state.architecturePlan = {
+      ...normalizeArchitecturePlan(state.architecturePlan),
+      actors: validation.normalized.actors,
+    };
+    await generateFirstPlotPoint();
   }
 
   async function generateOptionsForCurrentPlotPoint() {
@@ -721,6 +1000,7 @@ export function useStoryFlow(deps) {
       );
 
       state.currentOptions = parsePlotOptions(result);
+      setDnaResultReferences('currentOptions', captureAllActiveDnaReferences());
     } catch (error) {
       state.currentOptions = [];
       notify(`生成选项失败：${error.message}`, 'error');
@@ -753,7 +1033,7 @@ export function useStoryFlow(deps) {
 
       state.currentPlotPointIndex = plotIndex - 1;
       state.plotPointContents[plotIndex - 1] = result;
-      appendPlotBlock(chapterNum, plotIndex, result, sourceChoice);
+      appendPlotBlock(chapterNum, plotIndex, result, sourceChoice, captureAllActiveDnaReferences());
       state.currentOptions = [];
       setPendingPlotGeneration(null);
       clearChoiceSelection();
@@ -801,6 +1081,7 @@ export function useStoryFlow(deps) {
       );
 
       state.currentHooks = parseDirectionalHooks(result, '钩子', '悬念钩子', 'hook');
+      setDnaResultReferences('currentHooks', captureAllActiveDnaReferences());
       setStage(`ch${chapterNum}`);
     } catch (error) {
       state.currentHooks = [];
@@ -826,6 +1107,7 @@ export function useStoryFlow(deps) {
       );
 
       state.bigHooks = parseDirectionalHooks(result, '大钩子', '重大转折', 'bighook');
+      setDnaResultReferences('currentBigHooks', captureAllActiveDnaReferences());
     } catch (error) {
       state.bigHooks = [];
       notify(`生成大钩子失败：${error.message}`, 'error');
@@ -857,6 +1139,7 @@ export function useStoryFlow(deps) {
         label: `选项 ${index + 1}`,
         text: chosenOptionText,
         choice: chosenOption,
+        dnaReferenceItems: cloneDnaReferenceItems(state.dnaResultReferences?.currentOptions || []),
       };
 
       chapter.plotPoints.push({
@@ -905,6 +1188,7 @@ export function useStoryFlow(deps) {
         label: `钩子 ${index + 1}`,
         text: selectedHookText,
         choice: normalizeHookChoice(selectedHook, index, 'hook'),
+        dnaReferenceItems: cloneDnaReferenceItems(state.dnaResultReferences?.currentHooks || []),
       };
 
       if (state.currentChapter >= 4) {
@@ -952,6 +1236,7 @@ export function useStoryFlow(deps) {
         label: `大钩子 ${index + 1}`,
         text: formatHookForDisplay(selectedBigHook, 'bighook'),
         choice: normalizeHookChoice(selectedBigHook, index, 'bighook'),
+        dnaReferenceItems: cloneDnaReferenceItems(state.dnaResultReferences?.currentBigHooks || []),
       });
       setStage('style_writing');
       clearChoiceSelection();
@@ -1255,7 +1540,7 @@ export function useStoryFlow(deps) {
     cancelManualBrainholeModal,
     updateManualBrainholeDraftField,
     addManualBrainholeOption,
-    setGuideAndFirstPlotBlocks,
+    setGuideBlock,
     appendPlotBlock,
     appendChoiceRecordBlock,
     parsePlotBlockId,
@@ -1276,7 +1561,15 @@ export function useStoryFlow(deps) {
     deletePlotBlock,
     setFinalWorkBlock,
     generateBrainhole,
-    generateGuideAndFirstPlot,
+    generateGuide,
+    updateArchitectureField,
+    addArchitectureActor,
+    removeArchitectureActor,
+    updateArchitectureActorField,
+    generateArchitecture,
+    confirmArchitecture,
+    generatePersona,
+    confirmPersona,
     generateOptionsForCurrentPlotPoint,
     requestNextPlotPointText,
     generateNextPlotPoint,

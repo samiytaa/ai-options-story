@@ -11,6 +11,11 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  orientation: {
+    type: String,
+    default: 'horizontal',
+    validator: (value) => ['horizontal', 'vertical'].includes(value),
+  },
 });
 
 const emit = defineEmits(['navigate']);
@@ -26,22 +31,25 @@ const visibleStages = computed(() =>
 </script>
 
 <template>
-  <nav class="stage-indicator" aria-label="创作环节导航">
+  <nav class="stage-indicator" :class="`stage-indicator-${orientation}`" aria-label="创作环节导航">
     <template v-for="(item, index) in visibleStages" :key="item.stage">
-      <button
-        class="stage-label"
-        :class="{ active: item.stage === activeStageKey }"
-        type="button"
-        :aria-current="item.stage === activeStageKey ? 'step' : undefined"
-        @click="emit('navigate', item.stage)"
-      >
-        {{ item.label }}
-      </button>
-      <span
-        class="stage-dot"
-        :class="{ active: item.stage === activeStageKey, done: item.originalIndex < currentIndex }"
-      ></span>
-      <span v-if="index < visibleStages.length - 1" class="stage-arrow">▸</span>
+      <div class="stage-indicator-item">
+        <button
+          class="stage-label"
+          :class="{ active: item.stage === activeStageKey }"
+          type="button"
+          :aria-current="item.stage === activeStageKey ? 'step' : undefined"
+          @click="emit('navigate', item.stage)"
+        >
+          {{ item.label }}
+        </button>
+        <span
+          v-if="orientation === 'horizontal'"
+          class="stage-dot"
+          :class="{ active: item.stage === activeStageKey, done: item.originalIndex < currentIndex }"
+        ></span>
+      </div>
+      <span v-if="orientation === 'horizontal' && index < visibleStages.length - 1" class="stage-arrow">▸</span>
     </template>
   </nav>
 </template>

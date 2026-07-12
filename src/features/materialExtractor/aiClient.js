@@ -84,6 +84,59 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function normalizeEvidenceItem(item) {
+  return {
+    quote: String(item.quote || '').trim(),
+    interpretation: String(item.interpretation || '').trim(),
+    supports_field: String(item.supports_field || '').trim(),
+    chapter: Number.isFinite(Number(item.chapter)) ? Number(item.chapter) : null,
+    approx_char_offset: Number.isFinite(Number(item.approx_char_offset)) ? Number(item.approx_char_offset) : null,
+  }
+}
+
+function looksLikeTrackAnalysis(value) {
+  if (!isPlainObject(value)) return false
+  return [
+    'primary_track',
+    'secondary_tracks',
+    'reference_track',
+    'track_positioning',
+    'reader_emotion_needs',
+    'core_gratification_points',
+    'core_pain_points',
+    'common_character_relations',
+    'chapter_rhythm_skeleton',
+    'taboo_zones',
+    'brainhole_variable_tags',
+    'objective_features',
+    'reader_expectation',
+    'emotional_promise',
+    'structure_signature',
+    'risk_notes',
+    'evidence',
+  ].some(key => key in value)
+}
+
+function coerceTrackAnalysisPayload(payload) {
+  if (!isPlainObject(payload)) {
+    return payload
+  }
+
+  if (isPlainObject(payload.track_analysis)) {
+    return payload
+  }
+
+  if (looksLikeTrackAnalysis(payload)) {
+    return { track_analysis: payload }
+  }
+
+  if (isPlainObject(payload.data) && looksLikeTrackAnalysis(payload.data)) {
+    return { track_analysis: payload.data }
+  }
+
+  return payload
+}
+
 function validateAssetRecord(assetType, record, index) {
   if (!isPlainObject(record)) {
     throw new Error(`AI 返回格式异常：${assetType} 第 ${index + 1} 条资产不是对象`)
@@ -182,19 +235,21 @@ export function validateExtractionResponse(payload) {
 }
 
 export function validateTrackAnalysisResponse(payload, options = {}) {
-  if (!isPlainObject(payload)) {
+  const normalizedPayload = coerceTrackAnalysisPayload(payload)
+
+  if (!isPlainObject(normalizedPayload)) {
     throw new Error('AI 返回格式异常：响应不是对象')
   }
 
-  if (payload.analysis_results != null || payload.extraction_summary != null) {
+  if (normalizedPayload.analysis_results != null || normalizedPayload.extraction_summary != null) {
     throw new Error('AI 返回格式异常：赛道分析结果不应包含 DNA 抽取字段')
   }
 
-  if (!isPlainObject(payload.track_analysis)) {
+  if (!isPlainObject(normalizedPayload.track_analysis)) {
     throw new Error('AI 返回格式异常：缺少 track_analysis')
   }
 
-  const analysis = payload.track_analysis
+  const analysis = normalizedPayload.track_analysis
   const primaryTrack = String(analysis.primary_track || '').trim()
   if (!primaryTrack) {
     throw new Error('AI 返回格式异常：track_analysis.primary_track 不能为空，无法判断时应为 UNKNOWN')
@@ -207,6 +262,22 @@ export function validateTrackAnalysisResponse(payload, options = {}) {
   if (!Array.isArray(analysis.secondary_tracks)) {
     throw new Error('AI 返回格式异常：track_analysis.secondary_tracks 不是数组')
   }
+
+  const rulePackageArrayFields = [
+    'reader_emotion_needs',
+    'core_gratification_points',
+    'core_pain_points',
+    'common_character_relations',
+    'chapter_rhythm_skeleton',
+    'taboo_zones',
+    'brainhole_variable_tags',
+  ]
+
+  rulePackageArrayFields.forEach(field => {
+    if (analysis[field] != null && !Array.isArray(analysis[field])) {
+      throw new Error(`AI 返回格式异常：track_analysis.${field} 不是数组`)
+    }
+  })
 
   if (!Array.isArray(analysis.objective_features)) {
     throw new Error('AI 返回格式异常：track_analysis.objective_features 不是数组')
@@ -224,6 +295,18 @@ export function validateTrackAnalysisResponse(payload, options = {}) {
     throw new Error('AI 返回格式异常：track_analysis.evidence 不是数组')
   }
 
+  if (analysis.classification_decision != null && !isPlainObject(analysis.classification_decision)) {
+    throw new Error('AI 返回格式异常：track_analysis.classification_decision 不是对象')
+  }
+
+  if (analysis.track_card_seed != null && !isPlainObject(analysis.track_card_seed)) {
+    throw new Error('AI 返回格式异常：track_analysis.track_card_seed 不是对象')
+  }
+
+  if (analysis.sorting_notes != null && !isPlainObject(analysis.sorting_notes)) {
+    throw new Error('AI 返回格式异常：track_analysis.sorting_notes 不是对象')
+  }
+
   if (primaryTrack === 'UNKNOWN' && analysis.risk_notes.length === 0) {
     throw new Error('AI 返回格式异常：赛道为 UNKNOWN 时必须在 risk_notes 保留原因')
   }
@@ -234,14 +317,52 @@ export function validateTrackAnalysisResponse(payload, options = {}) {
       primary_track: primaryTrack,
       secondary_tracks: analysis.secondary_tracks.map(item => String(item || '').trim()).filter(Boolean),
       confidence: String(analysis.confidence || 'low').trim(),
+      reference_track: isPlainObject(analysis.reference_track)
+        ? analysis.reference_track
+        : null,
+      track_positioning: String(analysis.track_positioning || '').trim(),
+      reader_emotion_needs: Array.isArray(analysis.reader_emotion_needs)
+        ? analysis.reader_emotion_needs.map(item => String(item || '').trim()).filter(Boolean)
+        : [],
+      core_gratification_points: Array.isArray(analysis.core_gratification_points)
+        ? analysis.core_gratification_points.map(item => String(item || '').trim()).filter(Boolean)
+        : [],
+      core_pain_points: Array.isArray(analysis.core_pain_points)
+        ? analysis.core_pain_points.map(item => String(item || '').trim()).filter(Boolean)
+        : [],
+      common_character_relations: Array.isArray(analysis.common_character_relations)
+        ? analysis.common_character_relations.map(item => String(item || '').trim()).filter(Boolean)
+        : [],
+      chapter_rhythm_skeleton: Array.isArray(analysis.chapter_rhythm_skeleton)
+        ? analysis.chapter_rhythm_skeleton.filter(isPlainObject).map(item => ({
+            stage: String(item.stage || '').trim(),
+            function: String(item.function || '').trim(),
+            key_hook: String(item.key_hook || '').trim(),
+          }))
+        : [],
+      taboo_zones: Array.isArray(analysis.taboo_zones)
+        ? analysis.taboo_zones.map(item => String(item || '').trim()).filter(Boolean)
+        : [],
+      brainhole_variable_tags: Array.isArray(analysis.brainhole_variable_tags)
+        ? analysis.brainhole_variable_tags.map(item => String(item || '').trim()).filter(Boolean)
+        : [],
+      classification_decision: isPlainObject(analysis.classification_decision)
+        ? analysis.classification_decision
+        : null,
       objective_features: analysis.objective_features.map(item => String(item || '').trim()).filter(Boolean),
       reader_expectation: String(analysis.reader_expectation || '').trim(),
       emotional_promise: analysis.emotional_promise.map(item => String(item || '').trim()).filter(Boolean),
       structure_signature: isPlainObject(analysis.structure_signature)
         ? analysis.structure_signature
         : { opening: '', development: '', turn: '', ending: '' },
+      track_card_seed: isPlainObject(analysis.track_card_seed)
+        ? analysis.track_card_seed
+        : null,
+      sorting_notes: isPlainObject(analysis.sorting_notes)
+        ? analysis.sorting_notes
+        : null,
       risk_notes: analysis.risk_notes.map(item => String(item || '').trim()).filter(Boolean),
-      evidence: analysis.evidence.filter(isPlainObject),
+      evidence: analysis.evidence.filter(isPlainObject).map(normalizeEvidenceItem),
     }, {
       storyTitle: options.storyTitle,
       fallbackStoryTitle: options.fallbackStoryTitle,
@@ -309,34 +430,34 @@ async function requestJsonObjectFromAi(runtime, prompt, { temperature = 0.2 } = 
   return safeParseJson(content)
 }
 
-export async function requestTrackAnalysis(config, { title = '', text = '', platformNote = '' } = {}) {
+export async function requestTrackAnalysis(config, { title = '', text = '', platformNote = '', promptConfigs = null, availableTracks = null } = {}) {
   const runtime = assertAiRuntimeConfig(config)
-  const prompt = buildTrackAnalysisPrompt({ title, text, platformNote })
-  const parsed = await requestJsonObjectFromAi(runtime, prompt, { temperature: 0.1 })
+  const prompt = buildTrackAnalysisPrompt({ title, text, platformNote, promptConfigs, availableTracks })
+  const parsed = await requestJsonObjectFromAi(runtime, prompt, { temperature: prompt.temperature ?? 0.1 })
   const validated = validateTrackAnalysisResponse(parsed, { storyTitle: title })
 
   return {
     ...validated,
     request: {
       model: runtime.model,
-      temperature: 0.1,
+      temperature: prompt.temperature ?? 0.1,
       response_format: { type: 'json_object' },
     },
     prompt_sources: prompt.promptSources,
   }
 }
 
-export async function requestAssetExtraction(config, { title = '', text = '', mode = 'quick', confirmedTrack = 'UNKNOWN', trackAnalysis = null } = {}) {
+export async function requestAssetExtraction(config, { title = '', text = '', mode = 'quick', confirmedTrack = 'UNKNOWN', trackAnalysis = null, promptConfigs = null } = {}) {
   const runtime = assertAiRuntimeConfig(config)
-  const prompt = buildExtractionPrompt({ title, text, mode, confirmedTrack, trackAnalysis })
-  const parsed = await requestJsonObjectFromAi(runtime, prompt, { temperature: 0.2 })
+  const prompt = buildExtractionPrompt({ title, text, mode, confirmedTrack, trackAnalysis, promptConfigs })
+  const parsed = await requestJsonObjectFromAi(runtime, prompt, { temperature: prompt.temperature ?? 0.2 })
   const validated = validateExtractionResponse(parsed)
 
   return {
     ...validated,
     request: {
       model: runtime.model,
-      temperature: 0.2,
+      temperature: prompt.temperature ?? 0.2,
       response_format: { type: 'json_object' },
     },
     prompt_sources: prompt.promptSources,

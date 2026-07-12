@@ -50,6 +50,47 @@ export function resetPromptConfigRecords() {
   });
 }
 
+export function fetchMaterialPromptConfigs() {
+  return requestJson('/api/material-prompt-configs');
+}
+
+export function updateMaterialPromptConfigRecord(promptId, payload) {
+  return requestJson(`/api/material-prompt-configs/${encodeURIComponent(promptId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resetMaterialPromptConfigRecords() {
+  return requestJson('/api/material-prompt-configs', {
+    method: 'DELETE',
+  });
+}
+
+export function fetchMaterialTracks() {
+  return requestJson('/api/material-tracks');
+}
+
+export function createMaterialTrackRecord(trackId) {
+  return requestJson('/api/material-tracks', {
+    method: 'POST',
+    body: JSON.stringify({ id: trackId }),
+  });
+}
+
+export function renameMaterialTrackRecord(trackId, nextTrackId) {
+  return requestJson(`/api/material-tracks/${encodeURIComponent(trackId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ id: nextTrackId }),
+  });
+}
+
+export function deleteMaterialTrackRecord(trackId) {
+  return requestJson(`/api/material-tracks/${encodeURIComponent(trackId)}`, {
+    method: 'DELETE',
+  });
+}
+
 export function createProjectRecord(payload) {
   return requestJson('/api/projects', {
     method: 'POST',
@@ -77,6 +118,52 @@ export function fetchMaterialExtractionRecord(projectId) {
 export function saveMaterialExtractionRecord(projectId, payload) {
   return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-extraction`, {
     method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchMaterialOperationLogs(projectId) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-operation-logs`);
+}
+
+export function createMaterialOperationLog(projectId, payload) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-operation-logs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchMaterialExamples(projectId) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-examples`);
+}
+
+export function createMaterialExample(projectId, payload) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-examples`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMaterialExample(projectId, exampleId, payload) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-examples/${encodeURIComponent(exampleId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteMaterialExample(projectId, exampleId) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-examples/${encodeURIComponent(exampleId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function fetchMaterialExampleLinks(projectId, exampleId) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-examples/${encodeURIComponent(exampleId)}/links`);
+}
+
+export function createMaterialExampleLink(projectId, exampleId, payload) {
+  return requestJson(`/api/projects/${encodeURIComponent(projectId)}/material-examples/${encodeURIComponent(exampleId)}/links`, {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 }

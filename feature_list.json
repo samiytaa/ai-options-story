@@ -1,0 +1,8 @@
+[
+  {
+    "id": "react-node-tailwind-migration",
+    "title": "React + Node.js + Tailwind 迁移",
+    "status": "in-progress",
+    "scope": "把前端入口迁移到 React，保留 Node 服务端与既有功能布局，并建立 Tailwind 样式规范基础层与迁移执行文档。"
+  }
+]

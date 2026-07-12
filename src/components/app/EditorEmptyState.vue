@@ -31,7 +31,7 @@ const emit = defineEmits([
     </svg>
     <p class="empty-title">准备好开始创作了吗？</p>
     <p>左侧展开“”，先补充起点或上传风向标，再开始生成脑洞。</p>
-    <p class="empty-subtitle">流程：脑洞 → 导语 → 逐章剧情选择 → 钩子 → 大钩子 → 文风成文</p>
+    <p class="empty-subtitle">流程：脑洞 → 导语 → 生成架构 → 生成人设 → 第一个剧情点 → 逐章剧情选择 → 钩子 → 大钩子 → 文风成文</p>
     <div class="brainhole-workspace brainhole-workspace-intro empty-state-actions">
       <button class="manual-brainhole-add-card" type="button" :disabled="isLoading"
         @click="emit('open-manual-brainhole-modal')">

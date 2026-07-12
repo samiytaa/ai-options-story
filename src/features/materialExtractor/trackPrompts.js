@@ -1,4 +1,7 @@
 import skeletonSystem from './提示词/短故事工业化骨架与赛道结构系统.md?raw'
+import trackAnalysisModule from './提示词/赛道分析提示词模块.md?raw'
+import { buildMaterialPromptMessages } from './materialPromptConfig'
+import { DEFAULT_TRACK_IDS, normalizeTrackCatalog } from './assetPathRegistry'
 
 export const TRACK_PROMPT_SOURCE_FILES = [
   {
@@ -6,88 +9,77 @@ export const TRACK_PROMPT_SOURCE_FILES = [
     path: '提示词/短故事工业化骨架与赛道结构系统.md',
     content: skeletonSystem,
   },
+  {
+    name: '赛道分析提示词模块.md',
+    path: '提示词/赛道分析提示词模块.md',
+    content: trackAnalysisModule,
+  },
 ]
 
-function escapePromptText(text) {
-  return String(text || '').replace(/```/g, '`\\`\\`')
+function stringifyPromptValue(value) {
+  return JSON.stringify(value, null, 2)
 }
 
-function buildSystemPrompt() {
-  const promptBodies = TRACK_PROMPT_SOURCE_FILES.map(file => {
-    return [
-      `【来源文件】${file.path}`,
-      escapePromptText(file.content.trim()),
-    ].join('\n')
-  }).join('\n\n---\n\n')
+function buildTrackRulePackageProtocol(availableTracksText) {
+  return `
 
-  return [
-    '你正在执行短故事样文赛道分析。此调用只负责判断样文所属赛道与后续抽取上下文。',
-    '不要抽取 DNA 资产，不要输出 analysis_results，不要输出 extraction_summary，不要声称写入文件。',
-    '不要输出任何文件路径、路径模板或带占位符的目录字符串；赛道样文路径由调用方基于 confirmed track 自行解析。',
-    '如果赛道无法判断，primary_track 必须填 UNKNOWN，并在 risk_notes 与 evidence 中说明原因和证据缺口。',
-    '只输出单个可被 JSON.parse 解析的 JSON object，不要 Markdown，不要解释。',
-    '',
-    '=== 赛道结构参考开始 ===',
-    promptBodies,
-    '=== 赛道结构参考结束 ===',
-    '',
-    '=== 输出协议 ===',
-    '返回单个 JSON object，且只能包含顶层字段 track_analysis。',
-    'track_analysis 结构：',
-    '{',
-    '  "source_story": string,',
-    '  "primary_track": string,',
-    '  "secondary_tracks": string[],',
-    '  "confidence": "low" | "medium" | "high",',
-    '  "objective_features": string[],',
-    '  "reader_expectation": string,',
-    '  "emotional_promise": string[],',
-    '  "structure_signature": {',
-    '    "opening": string,',
-    '    "development": string,',
-    '    "turn": string,',
-    '    "ending": string',
-    '  },',
-    '  "risk_notes": string[],',
-    '  "evidence": Array<{',
-    '    "quote": string,',
-    '    "interpretation": string,',
-    '    "chapter": number,',
-    '    "approx_char_offset": number',
-    '  }>',
-    '}',
-  ].join('\n')
+=== 当前赛道分析规则包补充要求 ===
+primary_track 只能填写当前已有赛道之一或 UNKNOWN。
+当前已有赛道：${availableTracksText}。
+如果没有对应赛道，primary_track 必须填写 UNKNOWN，并在 reference_track.name 给出一个简短的 AI 参考赛道名，reference_track.reason 说明为什么不应归入已有赛道，reference_track.should_create 填 true。
+无论上方提示词是否已经声明，track_analysis 都必须额外包含以下字段：
+- reference_track: {name:string,reason:string,should_create:boolean}，没有新赛道建议时 name 为空字符串、should_create 为 false。
+- track_positioning: string，赛道定位。
+- reader_emotion_needs: string[]，读者情绪需求。
+- core_gratification_points: string[]，核心爽点。
+- core_pain_points: string[]，核心虐点。
+- common_character_relations: string[]，常见人设关系。
+- chapter_rhythm_skeleton: Array<{stage:string,function:string,key_hook:string}>，章节节奏骨架，至少覆盖开篇、推进、爆点、收束。
+- taboo_zones: string[]，禁忌雷区。
+- brainhole_variable_tags: string[]，适合生成脑洞的变量标签。
+这些字段用于后续抽脑洞、立项和细纲复用；不要输出具体故事梗概。
+=== 当前赛道分析规则包补充要求结束 ===`
 }
 
-function buildUserPrompt({ title = '', text = '', platformNote = '' } = {}) {
+function ensureTrackRulePackageProtocol(messages, availableTracksText) {
+  const systemMessage = messages[0] || { role: 'system', content: '' }
+  if (
+    systemMessage.content.includes('reference_track') &&
+    systemMessage.content.includes('track_positioning') &&
+    systemMessage.content.includes(availableTracksText)
+  ) {
+    return messages
+  }
+
   return [
-    '请基于下方样文完成赛道分析。',
-    '输出必须是可被 JSON.parse 直接解析的单个 JSON object。',
-    '',
-    '【输入】',
-    JSON.stringify(
-      {
-        title: String(title || '').trim(),
-        platform_note: String(platformNote || '').trim(),
-        text: String(text || ''),
-      },
-      null,
-      2,
-    ),
-  ].join('\n')
+    {
+      ...systemMessage,
+      content: `${systemMessage.content}${buildTrackRulePackageProtocol(availableTracksText)}`.trim(),
+    },
+    ...messages.slice(1),
+  ]
 }
 
 export function buildTrackAnalysisPrompt(input = {}) {
-  const systemPrompt = buildSystemPrompt()
-  const userPrompt = buildUserPrompt(input)
+  const { promptConfigs = null } = input
+  const availableTracks = normalizeTrackCatalog(input.availableTracks || DEFAULT_TRACK_IDS)
+  const availableTracksText = availableTracks.join(' / ')
+  const prompt = buildMaterialPromptMessages(promptConfigs || [], 'story-dna-track-analysis', {
+    trackPromptSource: skeletonSystem.trim(),
+    trackAnalysisModuleSource: trackAnalysisModule.trim(),
+    availableTracksText,
+    titleJson: stringifyPromptValue(String(input.title || '').trim()),
+    platformNoteJson: stringifyPromptValue(String(input.platformNote || '').trim()),
+    textJson: stringifyPromptValue(String(input.text || '')),
+  })
+
+  const messages = ensureTrackRulePackageProtocol(prompt.messages, availableTracksText)
 
   return {
+    temperature: prompt.config.temperature,
     promptSources: TRACK_PROMPT_SOURCE_FILES.map(file => file.path),
-    systemPrompt,
-    userPrompt,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
+    systemPrompt: messages[0].content,
+    userPrompt: messages[1].content,
+    messages,
   }
 }

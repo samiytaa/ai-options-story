@@ -6,6 +6,7 @@ import {
   SIDEBAR_STATE_STORAGE,
   WIND_VANE_FILE_STORAGE,
 } from './constants';
+import { normalizeProject as normalizeStoredProject } from './projects';
 
 function safeJsonClone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -38,21 +39,6 @@ function normalizeFavorite(item) {
   };
 }
 
-function normalizeProject(project) {
-  if (!project || typeof project !== 'object') return null;
-  const id = String(project.id || '').trim();
-  const name = String(project.name || '').trim();
-  if (!id || !name) return null;
-
-  return {
-    id,
-    name,
-    createdAt: project.createdAt || new Date().toISOString(),
-    updatedAt: project.updatedAt || project.createdAt || new Date().toISOString(),
-    snapshot: project.snapshot || null,
-  };
-}
-
 export function loadSidebarState() {
   try {
     const saved = JSON.parse(localStorage.getItem(SIDEBAR_STATE_STORAGE) || '{}');
@@ -82,7 +68,7 @@ export function readBrowserProjects() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROJECTS_STORAGE) || '[]');
     if (!Array.isArray(saved)) return [];
-    return saved.map((project) => normalizeProject(project)).filter(Boolean);
+    return saved.map((project) => normalizeStoredProject(project)).filter(Boolean);
   } catch {
     return [];
   }

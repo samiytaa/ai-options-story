@@ -5,6 +5,22 @@ export const TRACK_SAMPLE_PATHS = {
   pending: '02_样文与拆解/09_待分拣样文/[story_slug].md',
 }
 
+export const DEFAULT_TRACK_IDS = [
+  '01_追妻文',
+  '02_世情爽文',
+  '03_沙雕脑洞',
+  '04_四清正名文',
+  '05_无限流与规则怪谈',
+  '06_真实故事',
+  '07_男频热血与历史反转',
+  '08_番茄爆款案例',
+]
+
+export const PENDING_TRACK_ID = '09_待分拣样文'
+export const UNKNOWN_TRACK_ID = 'UNKNOWN'
+
+export const KNOWN_TRACK_IDS = DEFAULT_TRACK_IDS
+
 export const LEVEL_META = {
   L1: { title: 'L1 高频原料', desc: '生成与改稿优先调用', className: 'l1' },
   L2: { title: 'L2 结构机制', desc: '情节组织与角色资产', className: 'l2' },
@@ -87,6 +103,18 @@ export function sanitizePathPart(value, fallback = 'UNKNOWN') {
 
 export function normalizeTrackId(track) {
   return sanitizePathPart(track, 'UNKNOWN')
+}
+
+export function isKnownTrackId(track) {
+  return DEFAULT_TRACK_IDS.includes(normalizeTrackId(track))
+}
+
+export function normalizeTrackCatalog(tracks = []) {
+  const normalized = tracks
+    .map(track => normalizeTrackId(track))
+    .filter(track => track && track !== UNKNOWN_TRACK_ID && track !== PENDING_TRACK_ID)
+
+  return Array.from(new Set([...DEFAULT_TRACK_IDS, ...normalized]))
 }
 
 export function resolveTrackPath(kind, { track = 'UNKNOWN', story = '未命名故事' } = {}) {

@@ -120,6 +120,420 @@
   background: linear-gradient(135deg, var(--accent-hover), var(--accent2));
 }
 
+.material-extractor-page .material-history-modal {
+  max-width: min(960px, calc(100vw - 32px));
+}
+
+.material-extractor-page .material-story-assets-modal {
+  max-width: min(1180px, calc(100vw - 24px));
+}
+
+.material-extractor-page .material-global-search-modal {
+  max-width: min(1120px, calc(100vw - 24px));
+}
+
+.material-extractor-page .material-source-evidence-modal {
+  max-width: min(980px, calc(100vw - 24px));
+}
+
+.material-extractor-page .material-history-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.material-extractor-page .material-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(65vh, 720px);
+  padding: 0 24px 24px;
+  overflow: auto;
+}
+
+.material-extractor-page .material-history-item {
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--surface2) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-history-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: var(--text2);
+  font-size: 0.8rem;
+}
+
+.material-extractor-page .material-history-item h3 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 0.94rem;
+}
+
+.material-extractor-page .material-history-item p {
+  margin: 0 0 6px;
+  color: var(--text2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.material-extractor-page .material-history-item small {
+  color: var(--text3);
+}
+
+.material-extractor-page .material-history-asset-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+
+.material-extractor-page .material-history-asset-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.material-extractor-page .material-history-asset-chip strong {
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
+.material-extractor-page .material-story-assets-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.material-extractor-page .material-story-assets-results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: min(68vh, 760px);
+  padding: 0 24px 24px;
+  overflow: auto;
+}
+
+.material-extractor-page .material-global-search-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.material-extractor-page .material-global-search-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-height: min(68vh, 760px);
+  padding: 0 24px 24px;
+  overflow: auto;
+}
+
+.material-extractor-page .material-global-search-group {
+  padding: 14px;
+  background: color-mix(in srgb, var(--surface2) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-global-search-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.material-extractor-page .material-global-search-group > header span {
+  color: var(--text3);
+  font-size: 0.74rem;
+}
+
+.material-extractor-page .material-global-search-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.material-extractor-page .material-global-search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.material-extractor-page .material-global-search-item strong {
+  color: var(--text);
+  font-size: 0.76rem;
+}
+
+.material-extractor-page .material-global-search-item span {
+  color: var(--text3);
+  font-size: 0.72rem;
+}
+
+.material-extractor-page .material-story-card {
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface2) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-story-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.material-extractor-page .material-story-card-header h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.material-extractor-page .material-story-card-header p,
+.material-extractor-page .material-story-card-header time {
+  margin: 0;
+  color: var(--text2);
+  font-size: 0.82rem;
+}
+
+.material-extractor-page .material-story-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.material-extractor-page .material-story-portrait {
+  margin-bottom: 18px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-story-portrait-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.material-extractor-page .material-story-portrait-header span {
+  color: var(--text3);
+  font-size: 0.74rem;
+}
+
+.material-extractor-page .material-story-portrait-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.material-extractor-page .material-story-portrait-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 132px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface2) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-story-portrait-card.muted {
+  opacity: 0.72;
+}
+
+.material-extractor-page .material-story-portrait-label {
+  color: var(--text3);
+  font-size: 0.72rem;
+}
+
+.material-extractor-page .material-story-portrait-value {
+  flex: 1 1 auto;
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.material-extractor-page .material-story-portrait-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.material-extractor-page .material-story-product-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-story-product-card strong {
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.material-extractor-page .material-story-product-card code {
+  color: var(--text2);
+  font-size: 0.76rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.material-extractor-page .material-story-level-group + .material-story-level-group {
+  margin-top: 16px;
+}
+
+.material-extractor-page .material-story-level-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.material-extractor-page .material-story-level-title span {
+  color: var(--text3);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.material-extractor-page .material-story-asset-type-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.material-extractor-page .material-story-asset-type-card {
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-story-asset-type-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.material-extractor-page .material-story-asset-type-card > header strong {
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.material-extractor-page .material-story-asset-type-card > header span,
+.material-extractor-page .material-story-asset-type-card > small {
+  color: var(--text3);
+  font-size: 0.74rem;
+}
+
+.material-extractor-page .material-story-asset-type-card > small {
+  display: block;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.material-extractor-page .material-story-asset-records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.material-extractor-page .material-story-asset-record {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface2) 86%, transparent);
+  overflow: hidden;
+}
+
+.material-extractor-page .material-story-asset-record summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 0.76rem;
+}
+
+.material-extractor-page .material-story-asset-meta {
+  padding: 0 12px 10px;
+  color: var(--text3);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.material-extractor-page .material-story-asset-record pre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-top: 1px solid var(--border);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .material-extractor-page .material-history-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .material-extractor-page .material-story-assets-toolbar,
+  .material-extractor-page .material-story-portrait-grid,
+  .material-extractor-page .material-story-asset-type-list,
+  .material-extractor-page .material-story-product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .material-extractor-page .material-story-card-header {
+    flex-direction: column;
+  }
+}
+
 .material-extractor-page #main {
   display: flex;
   flex: 1 1 auto;
@@ -589,6 +1003,11 @@
   border-radius: var(--radius-sm);
 }
 
+.material-extractor-page .asset-record-card.active-record {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
 .material-extractor-page .asset-record-title {
   margin-bottom: 6px;
   color: var(--accent);
@@ -601,6 +1020,262 @@
   font-size: 0.68rem;
 }
 
+.material-extractor-page .asset-detail-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.material-extractor-page .asset-detail-section-title {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.material-extractor-page .asset-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.material-extractor-page .asset-evidence-item {
+  padding: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .asset-evidence-item strong,
+.material-extractor-page .asset-evidence-item p,
+.material-extractor-page .asset-evidence-item small {
+  display: block;
+}
+
+.material-extractor-page .asset-evidence-item strong {
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
+.material-extractor-page .asset-evidence-item p {
+  margin: 0;
+  color: var(--text2);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.material-extractor-page .asset-evidence-item small {
+  margin-top: 6px;
+  color: var(--text3);
+  font-size: 0.7rem;
+}
+
+.material-extractor-page button.asset-evidence-item {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.material-extractor-page .material-source-evidence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(68vh, 760px);
+  padding: 0 24px 24px;
+  overflow: auto;
+}
+
+.material-extractor-page .material-source-evidence-meta {
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface2) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-source-evidence-meta strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.material-extractor-page .material-source-evidence-meta p {
+  margin: 0;
+  color: var(--text2);
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+.material-extractor-page .material-source-evidence-content {
+  padding: 14px;
+  color: var(--text2);
+  white-space: pre-wrap;
+  font-size: 0.78rem;
+  line-height: 1.8;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .material-source-evidence-content mark {
+  padding: 0 2px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.material-extractor-page .material-source-evidence-content hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.material-extractor-page .asset-related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.material-extractor-page .asset-related-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.material-extractor-page .asset-related-chip span {
+  color: var(--text3);
+  font-size: 0.68rem;
+}
+
+.material-extractor-page .asset-related-chip strong {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.material-extractor-page .relation-network-section {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.material-extractor-page .relation-network-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.material-extractor-page .relation-filter-btn {
+  padding: 6px 10px;
+  color: var(--text2);
+  background: color-mix(in srgb, var(--surface2) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.material-extractor-page .relation-filter-btn.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.material-extractor-page .relation-network-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 12px;
+}
+
+.material-extractor-page .relation-network-column {
+  min-width: 0;
+}
+
+.material-extractor-page .relation-network-subtitle {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.material-extractor-page .relation-node-list,
+.material-extractor-page .relation-edge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.material-extractor-page .relation-node-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface2) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.material-extractor-page .relation-node-card strong {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.material-extractor-page .relation-node-card span {
+  color: var(--text3);
+  font-size: 0.7rem;
+}
+
+.material-extractor-page .relation-edge-card {
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface2) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .relation-edge-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.material-extractor-page .relation-edge-head strong,
+.material-extractor-page .relation-edge-head span {
+  font-size: 0.72rem;
+}
+
+.material-extractor-page .relation-edge-head span {
+  color: var(--accent);
+  text-align: center;
+}
+
+.material-extractor-page .relation-edge-card p {
+  margin: 0 0 8px;
+  color: var(--text2);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.material-extractor-page .relation-edge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .material-extractor-page .tag {
   display: inline-block;
   margin: 2px;
@@ -609,6 +1284,22 @@
   font-weight: 500;
   letter-spacing: 0.02em;
   border-radius: 999px;
+}
+
+.material-extractor-page button.tag {
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+
+.material-extractor-page button.tag:hover,
+.material-extractor-page button.tag.active {
+  border-color: currentColor;
+}
+
+.material-extractor-page button.tag span {
+  margin-left: 4px;
+  opacity: 0.72;
 }
 
 .material-extractor-page .tag.emotion {
@@ -846,6 +1537,134 @@
 .material-extractor-page .modal .close:hover {
   color: var(--text);
   background: none;
+}
+
+.material-extractor-page .track-decision-warning {
+  display: grid;
+  gap: 10px;
+  color: var(--text2);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.material-extractor-page .track-decision-warning p {
+  margin: 0;
+}
+
+.material-extractor-page .track-decision-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.material-extractor-page .track-decision-section strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.material-extractor-page .track-decision-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.material-extractor-page .track-decision-chip {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+}
+
+.material-extractor-page .track-decision-chip.active {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  color: var(--accent);
+}
+
+.material-extractor-page .track-manager-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.material-extractor-page .track-manager-modal p {
+  margin: 0;
+  color: var(--text2);
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.material-extractor-page .track-manager-list {
+  display: grid;
+  gap: 8px;
+}
+
+.material-extractor-page .track-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--surface2) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.material-extractor-page .track-manager-row-main {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.material-extractor-page .track-manager-row .input-title-field {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.material-extractor-page .track-manager-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.material-extractor-page .track-manager-meta span {
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 999px;
+}
+
+.material-extractor-page .track-manager-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.material-extractor-page .track-manager-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 760px) {
+  .material-extractor-page .track-manager-row,
+  .material-extractor-page .track-manager-row-main {
+    grid-template-columns: 1fr;
+  }
+
+  .material-extractor-page .track-manager-meta,
+  .material-extractor-page .track-manager-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
 }
 
 .material-extractor-page .ai-config-form {

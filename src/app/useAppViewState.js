@@ -28,6 +28,8 @@ function stageLabelMap() {
   return {
     brainhole: '脑洞',
     guide: '导语',
+    architecture_setup: '生成架构',
+    persona_setup: '生成人设',
     ch1: '第一章',
     ch2: '第二章',
     ch3: '第三章',
@@ -63,7 +65,7 @@ export function useAppViewState(deps) {
   } = deps;
 
   const progressPercent = computed(() => {
-    const stages = ['setup', 'brainhole', 'guide', 'ch1', 'ch2', 'ch3', 'ch4_bighooks', 'style_writing', 'complete'];
+    const stages = ['setup', 'brainhole', 'guide', 'architecture_setup', 'persona_setup', 'ch1', 'ch2', 'ch3', 'ch4_bighooks', 'style_writing', 'complete'];
     const currentIndex = Math.max(0, stages.indexOf(state.stage));
     return Math.round((currentIndex / (stages.length - 1)) * 100);
   });
@@ -116,6 +118,8 @@ export function useAppViewState(deps) {
     const stage = getValue(activeStageView);
     if (stage === 'brainhole') return '这个环节还没有脑洞内容。';
     if (stage === 'guide') return '这个环节还没有导语内容。';
+    if (stage === 'architecture_setup') return '这个环节还没有完成故事架构。';
+    if (stage === 'persona_setup') return '这个环节还没有完成人设分配。';
     if (/^ch\d+$/.test(stage)) return `${label}还没有生成剧情点。`;
     if (stage === 'ch4_bighooks') return '这个环节还没有大钩子候选。';
     if (stage === 'style_writing') return '选择大钩子后，会在这里输入文风并生成正文。';
@@ -181,6 +185,24 @@ export function useAppViewState(deps) {
       });
     }
 
+    if (state.architecturePlan?.storySummary || state.architecturePlan?.actors?.length) {
+      entries.push({
+        key: 'architecture-setup',
+        badge: '架构',
+        badgeClass: 'badge-info',
+        text: (state.architecturePlan.storySummary || '已完成故事架构').slice(0, 80),
+      });
+    }
+
+    if (state.architecturePlan?.actors?.length) {
+      entries.push({
+        key: 'persona-setup',
+        badge: '人设',
+        badgeClass: 'badge-warn',
+        text: `已配置 ${state.architecturePlan.actors.length} 个核心角色`,
+      });
+    }
+
     state.chapters.forEach((chapter) => {
       entries.push({
         key: `chapter-${chapter.chapterNum}`,
@@ -234,6 +256,10 @@ export function useAppViewState(deps) {
       lines.push(`【选定脑洞】${state.brainhole}`);
     }
 
+    if (state.architecturePlan?.storySummary) {
+      lines.push(`【故事起点】${state.architecturePlan.storySummary}`);
+    }
+
     state.chapters.forEach((chapter) => {
       chapter.plotPoints?.forEach((plotPoint, index) => {
         const chosenText = plotPoint.options?.[plotPoint.chosenOption];
@@ -280,6 +306,7 @@ export function useAppViewState(deps) {
   function blockBelongsToStageView(block, stage) {
     if (stage === 'brainhole') return block.id === 'brainhole' || block.id === 'brainhole-options';
     if (stage === 'guide') return block.id === 'guide';
+    if (stage === 'architecture_setup' || stage === 'persona_setup') return false;
     if (stage === 'complete') return block.id === 'final-work';
     if (stage === 'style_writing') return block.id === 'choice-record-big-hook';
     if (stage === 'ch4_bighooks') return block.id === 'choice-record-ch4-hook';

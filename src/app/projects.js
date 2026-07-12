@@ -1,4 +1,5 @@
 import { normalizeFavorite } from './favorites';
+import { normalizeArchitecturePlan } from '../features/architectureSetup/architectureState.js';
 
 export function createEmptyProject(name = '') {
   const now = new Date().toISOString();
@@ -8,6 +9,21 @@ export function createEmptyProject(name = '') {
     createdAt: now,
     updatedAt: now,
     snapshot: null,
+  };
+}
+
+export function normalizeProjectSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const normalizedState = snapshot.state && typeof snapshot.state === 'object'
+    ? {
+      ...snapshot.state,
+      architecturePlan: normalizeArchitecturePlan(snapshot.state.architecturePlan || {}),
+    }
+    : undefined;
+
+  return {
+    ...snapshot,
+    ...(normalizedState ? { state: normalizedState } : {}),
   };
 }
 
@@ -22,7 +38,7 @@ export function normalizeProject(project) {
     name,
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || project.createdAt || new Date().toISOString(),
-    snapshot: project.snapshot || null,
+    snapshot: normalizeProjectSnapshot(project.snapshot),
   };
 }
 

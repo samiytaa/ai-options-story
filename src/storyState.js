@@ -1,7 +1,14 @@
+import {
+  buildArchitectureSummary,
+  createEmptyArchitecturePlan,
+} from './features/architectureSetup/architectureState.js';
+
 export const STAGES = [
   'setup',
   'brainhole',
   'guide',
+  'architecture_setup',
+  'persona_setup',
   'ch1',
   'ch2',
   'ch3',
@@ -10,7 +17,32 @@ export const STAGES = [
   'complete',
 ];
 
-export const STAGE_LABELS = ['设置', '脑洞', '导语', '第一章', '第二章', '第三章', '第四章·大钩子', '文风成文', '完成'];
+export const STAGE_LABELS = ['设置', '脑洞', '导语', '生成架构', '生成人设', '第一章', '第二章', '第三章', '第四章·大钩子', '文风成文', '完成'];
+
+export function createEmptyDnaAssetReferences() {
+  return {
+    brainhole: [],
+    guide: [],
+    outline: [],
+  };
+}
+
+export function cloneDnaReferenceItems(items = []) {
+  return Array.isArray(items)
+    ? items.map((item) => ({ ...item }))
+    : [];
+}
+
+export function createEmptyDnaResultReferences() {
+  return {
+    brainholeOptions: [],
+    guide: [],
+    architecture: [],
+    currentOptions: [],
+    currentHooks: [],
+    currentBigHooks: [],
+  };
+}
 
 export function createInitialState(aiConfig) {
   return {
@@ -20,6 +52,7 @@ export function createInitialState(aiConfig) {
     brainholeOptions: [],
     selectedBrainholeIndex: null,
     guide: '',
+    architecturePlan: createEmptyArchitecturePlan(),
     chapters: [],
     currentChapter: 1,
     currentPlotPointIndex: 0,
@@ -30,6 +63,8 @@ export function createInitialState(aiConfig) {
     finalStyle: '',
     finalWork: '',
     customPromptInstruction: '',
+    dnaAssetReferences: createEmptyDnaAssetReferences(),
+    dnaResultReferences: createEmptyDnaResultReferences(),
     stage: 'setup',
     plotPointContents: [],
   };
@@ -39,6 +74,8 @@ export function buildContextSummary(state) {
   let summary = '';
   if (state.brainhole) summary += `【脑洞】${state.brainhole}\n`;
   if (state.guide) summary += `【导语】${state.guide}\n`;
+  const architectureSummary = buildArchitectureSummary(state.architecturePlan);
+  if (architectureSummary) summary += `${architectureSummary}\n`;
 
   state.chapters.forEach((chapter) => {
     summary += `\n--- 第${chapter.chapterNum}章 ---\n`;

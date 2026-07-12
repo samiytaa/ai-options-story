@@ -1,11 +1,15 @@
 <script setup>
-import { computed, ref } from 'vue';
-import ChoiceList from '../ChoiceList.vue';
+import { computed } from 'vue';
 import BrainholeOptionsStage from './BrainholeOptionsStage.vue';
 import FinalWorkEditor from './FinalWorkEditor.vue';
+import ArchitectureSetupStage from '../../features/architectureSetup/ArchitectureSetupStage.vue';
 
 const props = defineProps({
   activeStageViewLabel: {
+    type: String,
+    default: '',
+  },
+  activeStageView: {
     type: String,
     default: '',
   },
@@ -36,6 +40,26 @@ const props = defineProps({
   showFinalActions: {
     type: Boolean,
     default: false,
+  },
+  architecturePlan: {
+    type: Object,
+    default: () => ({}),
+  },
+  brainhole: {
+    type: String,
+    default: '',
+  },
+  guide: {
+    type: String,
+    default: '',
+  },
+  dnaAssetReferences: {
+    type: Object,
+    default: () => ({ brainhole: [], guide: [], outline: [] }),
+  },
+  dnaResultReferences: {
+    type: Object,
+    default: () => ({ brainholeOptions: [], guide: [], architecture: [] }),
   },
   pendingPlotGenerationAvailable: {
     type: Boolean,
@@ -164,7 +188,7 @@ const emit = defineEmits([
   'start-edit-brainhole-option',
   'favorite-brainhole-option',
   'delete-brainhole-option',
-  'generate-guide-and-first-plot',
+  'generate-guide',
   'select-choice',
   'regenerate-current-choices',
   'generate-current-choice-result-variants',
@@ -176,10 +200,19 @@ const emit = defineEmits([
   'favorite-current-choice',
   'update:styleInput',
   'update:customPromptInstruction',
+  'open-dna-asset',
   'final-writing',
   'copy-final-work',
   'download-final-work',
   'reset-all',
+  'generate-architecture',
+  'confirm-architecture',
+  'generate-persona',
+  'confirm-persona',
+  'update-architecture-field',
+  'add-architecture-actor',
+  'remove-architecture-actor',
+  'update-architecture-actor-field',
 ]);
 
 const showEmptyState = computed(
@@ -188,13 +221,10 @@ const showEmptyState = computed(
     !props.showBrainholeAction &&
     !props.showCurrentChoicePanel &&
     !props.showStylePanel &&
-    !props.showFinalActions,
+    !props.showFinalActions &&
+    props.activeStageView !== 'architecture_setup' &&
+    props.activeStageView !== 'persona_setup',
 );
-const showManualPendingChoiceModal = ref(false);
-const manualPendingChoiceText = ref('');
-const manualPendingChoiceResult = ref('');
-const canAddManualPendingChoice = computed(() => props.pendingChoiceGenerationLabel === '生成剧情选项');
-
 function updateEditingContent(event) {
   emit('update:editingContent', event.target.value);
 }
@@ -211,59 +241,8 @@ function updateCustomPromptInstruction(event) {
   emit('update:customPromptInstruction', event.target.value);
 }
 
-function openManualPendingChoiceModal() {
-  manualPendingChoiceText.value = '';
-  manualPendingChoiceResult.value = '';
-  showManualPendingChoiceModal.value = true;
-}
-
-function closeManualPendingChoiceModal() {
-  showManualPendingChoiceModal.value = false;
-  manualPendingChoiceText.value = '';
-  manualPendingChoiceResult.value = '';
-}
-
-function saveManualPendingChoice() {
-  const option = manualPendingChoiceText.value.trim();
-  if (!option) return;
-
-  emit('add-current-choice-option', {
-    option,
-    result: manualPendingChoiceResult.value.trim(),
-  }, 'option');
-  closeManualPendingChoiceModal();
-}
-
 function setQuickStyle(style) {
   emit('update:styleInput', style);
-}
-
-function forwardSelect(index, type) {
-  emit('select-choice', index, type);
-}
-
-function forwardRegenerate(type) {
-  emit('regenerate-current-choices', type);
-}
-
-function forwardGenerateResultVariants(index, type, done) {
-  emit('generate-current-choice-result-variants', index, type, done);
-}
-
-function forwardUpdateOption(index, value, type) {
-  emit('update-current-choice-option', index, value, type);
-}
-
-function forwardAddOption(value, type) {
-  emit('add-current-choice-option', value, type);
-}
-
-function forwardDeleteOption(index, type) {
-  emit('delete-current-choice-option', index, type);
-}
-
-function forwardFavorite(option, index, type) {
-  emit('favorite-current-choice', option, index, type);
 }
 
 function forwardBrainholeFavorite(option, index) {
@@ -289,10 +268,12 @@ function blockTypeClass(block) {
   return 'stage-section-generic';
 }
 
-function choicePanelClass(type) {
-  if (type === 'hook') return 'choice-panel-hook';
-  if (type === 'bighook') return 'choice-panel-bighook';
-  return 'choice-panel-option';
+function getBlockDnaReferenceItems(block) {
+  return Array.isArray(block?.dnaReferenceItems) ? block.dnaReferenceItems : [];
+}
+
+function getSourceChoiceDnaReferenceItems(block) {
+  return Array.isArray(block?.sourceChoice?.dnaReferenceItems) ? block.sourceChoice.dnaReferenceItems : [];
 }
 
 function showToolbarWordCount(block) {
@@ -301,6 +282,14 @@ function showToolbarWordCount(block) {
 
 function showInlineWordCount(block) {
   return !showToolbarWordCount(block);
+}
+
+function forwardArchitectureField(field, value) {
+  emit('update-architecture-field', field, value);
+}
+
+function forwardArchitectureActorField(index, field, value) {
+  emit('update-architecture-actor-field', index, field, value);
 }
 </script>
 
@@ -322,6 +311,23 @@ function showInlineWordCount(block) {
   <div v-if="showEmptyState" class="stage-empty-state">
     {{ activeStageEmptyText }}
   </div>
+
+  <ArchitectureSetupStage
+    v-if="activeStageView === 'architecture_setup' || activeStageView === 'persona_setup'"
+    :architecture-plan="architecturePlan"
+    :mode="activeStageView === 'persona_setup' ? 'persona' : 'architecture'"
+    :brainhole="brainhole"
+    :guide="guide"
+    :reference-groups="{ guide: dnaAssetReferences?.guide || [], outline: dnaAssetReferences?.outline || [] }"
+    :result-reference-groups="{ guide: dnaResultReferences?.guide || [], architecture: dnaResultReferences?.architecture || [] }"
+    :is-loading="isLoading"
+    @generate="emit(activeStageView === 'persona_setup' ? 'generate-persona' : 'generate-architecture')"
+    @confirm="emit(activeStageView === 'persona_setup' ? 'confirm-persona' : 'confirm-architecture')"
+    @update-field="forwardArchitectureField"
+    @add-actor="emit('add-architecture-actor')"
+    @remove-actor="emit('remove-architecture-actor', $event)"
+    @update-actor-field="forwardArchitectureActorField"
+  />
 
   <section v-for="block in visibleStoryBlocks" :key="block.id" class="stage-section" :class="blockTypeClass(block)">
     <div v-if="block.divider" class="chapter-divider">{{ block.divider }}</div>
@@ -351,6 +357,20 @@ function showInlineWordCount(block) {
             <p class="choice-field-text">{{ paragraph }}</p>
           </div>
         </template>
+        <div v-if="getSourceChoiceDnaReferenceItems(block).length" class="choice-reference-strip">
+          <span class="choice-field-label">引用 DNA</span>
+          <div class="btn-row">
+            <button
+              v-for="item in getSourceChoiceDnaReferenceItems(block)"
+              :key="`source-${block.id}-${item.assetType}-${item.assetId}`"
+              class="btn btn-secondary btn-sm"
+              type="button"
+              @click="emit('open-dna-asset', item)"
+            >
+              {{ item.label || item.assetName || item.assetId || 'DNA资产' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="story-block">
@@ -374,6 +394,21 @@ function showInlineWordCount(block) {
           :disabled="isLoading" @click="emit('regenerate-plot-block-result', block)">
           重新生成结果
         </button>
+      </div>
+
+      <div v-if="getBlockDnaReferenceItems(block).length" class="choice-reference-strip">
+        <span class="choice-field-label">本结果引用 DNA</span>
+        <div class="btn-row">
+          <button
+            v-for="item in getBlockDnaReferenceItems(block)"
+            :key="`block-${block.id}-${item.assetType}-${item.assetId}`"
+            class="btn btn-secondary btn-sm"
+            type="button"
+            @click="emit('open-dna-asset', item)"
+          >
+            {{ item.label || item.assetName || item.assetId || 'DNA资产' }}
+          </button>
+        </div>
       </div>
 
       <template v-if="editingBlockId === block.id">
@@ -441,8 +476,8 @@ function showInlineWordCount(block) {
         <div class="section-title">确认脑洞后继续推进</div>
       </div>
     </div>
-    <button class="btn btn-primary" type="button" :disabled="isLoading" @click="emit('generate-guide-and-first-plot')">
-      生成导语 & 第一个剧情点
+    <button class="btn btn-primary" type="button" :disabled="isLoading" @click="emit('generate-guide')">
+      生成导语
     </button>
     <section class="custom-prompt-panel" aria-label="本次额外生成要求">
       <label for="custom-prompt-instruction-guide">本次额外要求</label>
@@ -455,120 +490,6 @@ function showInlineWordCount(block) {
       <span class="manual-brainhole-add-plus">+</span>
       <span>手动添加脑洞</span>
     </button>
-  </div>
-
-  <div v-if="showCurrentChoicePanel" class="choice-panel" :class="choicePanelClass(currentChoiceType)">
-    <div class="panel-intro-row panel-intro-row-choice">
-      <div>
-        <span class="panel-kicker">分支决策</span>
-        <div class="section-title">
-          {{ currentChoiceTitle }}
-        </div>
-      </div>
-    </div>
-    <section v-if="selectedChoiceIndex === null" class="custom-prompt-panel custom-prompt-panel-inline"
-      aria-label="本次额外生成要求">
-      <label for="custom-prompt-instruction-regenerate">本次额外要求</label>
-      <textarea id="custom-prompt-instruction-regenerate" :value="customPromptInstruction" rows="1"
-        placeholder="例如：重新生成时让选项更有差异、结果更尖锐、走向更贴近你想要的方向。" :disabled="isLoading" @input="updateCustomPromptInstruction" />
-    </section>
-    <ChoiceList :options="currentChoices" :type="currentChoiceType" :selected-index="selectedChoiceIndex"
-      :disabled="isLoading" @select="forwardSelect" @regenerate="forwardRegenerate"
-      @generate-result-variants="forwardGenerateResultVariants" @update-option="forwardUpdateOption"
-      @add-option="forwardAddOption" @delete-option="forwardDeleteOption" @favorite="forwardFavorite" />
-  </div>
-
-  <div v-if="pendingPlotGenerationAvailable" class="action-panel action-panel-plot">
-    <div class="panel-intro-row">
-      <div>
-        <span class="panel-kicker">情节推进</span>
-        <div class="section-title">基于已选分支继续生成下一段剧情</div>
-      </div>
-    </div>
-    <button class="btn btn-primary" type="button" :disabled="isLoading"
-      @click="emit('continue-pending-plot-generation')">
-      生成下一段剧情
-    </button>
-    <section class="custom-prompt-panel" aria-label="本次额外生成要求">
-      <label for="custom-prompt-instruction-plot">本次额外要求</label>
-      <textarea id="custom-prompt-instruction-plot" :value="customPromptInstruction" rows="3"
-        placeholder="例如：让下一段更偏感情拉扯、加重代价、不要立刻揭晓真相。会追加到当前生成按钮的提示词后。" :disabled="isLoading"
-        @input="updateCustomPromptInstruction" />
-    </section>
-  </div>
-
-  <div v-if="pendingChoiceGenerationAvailable" class="action-panel action-panel-choice">
-    <div class="panel-intro-row">
-      <div>
-        <span class="panel-kicker">分支生成</span>
-        <div class="section-title">为当前剧情点补充分支与走向</div>
-      </div>
-    </div>
-    <div class="btn-row pending-choice-action-row">
-      <button class="btn btn-secondary" type="button" :disabled="isLoading" @click="emit('generate-pending-choices')">
-        {{ pendingChoiceGenerationLabel }}
-      </button>
-      <button
-        v-if="canAddManualPendingChoice"
-        class="btn btn-secondary"
-        type="button"
-        :disabled="isLoading"
-        @click="openManualPendingChoiceModal"
-      >
-        手动添加选项
-      </button>
-    </div>
-    <section class="custom-prompt-panel" aria-label="本次额外生成要求">
-      <label for="custom-prompt-instruction-choice">本次额外要求</label>
-      <textarea id="custom-prompt-instruction-choice" :value="customPromptInstruction" rows="3"
-        placeholder="例如：给出更激进/更保守/更反转的走向，选项之间差异要更大。会追加到当前生成按钮的提示词后。" :disabled="isLoading"
-        @input="updateCustomPromptInstruction" />
-    </section>
-  </div>
-
-  <div v-if="showManualPendingChoiceModal" class="modal-backdrop choice-add-backdrop" @click.self="closeManualPendingChoiceModal">
-    <section class="settings-modal choice-add-modal" role="dialog" aria-modal="true" aria-labelledby="manual-pending-choice-title">
-      <header class="settings-modal-header">
-        <div>
-          <h2 id="manual-pending-choice-title">手动添加剧情选项</h2>
-          <p>选项必填，结果可以留空。保存后会进入当前剧情选项池。</p>
-        </div>
-        <button class="btn btn-secondary btn-sm" type="button" :disabled="isLoading" @click="closeManualPendingChoiceModal">
-          关闭
-        </button>
-      </header>
-
-      <div class="settings-modal-body">
-        <div class="choice-add-form">
-          <label for="manual-pending-choice-option">选项</label>
-          <textarea
-            id="manual-pending-choice-option"
-            v-model="manualPendingChoiceText"
-            class="choice-add-textarea"
-            placeholder="输入角色可以采取的行为或选择"
-            :disabled="isLoading"
-          />
-
-          <label for="manual-pending-choice-result">结果</label>
-          <textarea
-            id="manual-pending-choice-result"
-            v-model="manualPendingChoiceResult"
-            class="choice-add-textarea"
-            placeholder="输入选择后推动剧情的结果，可留空"
-            :disabled="isLoading"
-          />
-        </div>
-      </div>
-
-      <footer class="settings-modal-footer">
-        <button class="btn btn-secondary btn-sm" type="button" :disabled="isLoading" @click="closeManualPendingChoiceModal">
-          取消
-        </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="isLoading || !manualPendingChoiceText.trim()" @click="saveManualPendingChoice">
-          保存
-        </button>
-      </footer>
-    </section>
   </div>
 
   <div v-if="showStylePanel" class="style-panel style-panel-final">

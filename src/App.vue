@@ -14,7 +14,6 @@ import FavoritesLibraryModal from './components/app/FavoritesLibraryModal.vue';
 import ManualBrainholeModal from './components/app/ManualBrainholeModal.vue';
 import ProjectManagerModal from './components/app/ProjectManagerModal.vue';
 import PromptConfigModal from './components/app/PromptConfigModal.vue';
-import StageIndicator from './components/StageIndicator.vue';
 import ToastStack from './components/ToastStack.vue';
 import { callAiChat, fetchAvailableModels } from './services/aiClient';
 import {
@@ -68,7 +67,7 @@ import { useProjectLibrary } from './app/useProjectLibrary';
 import { useStoryFlow } from './app/useStoryFlow';
 import { useWindVaneFile } from './app/useWindVaneFile';
 const savedApiConfig = loadApiConfig();
-const savedTheme = localStorage.getItem(THEME_STORAGE) || 'dark';
+const savedTheme = localStorage.getItem(THEME_STORAGE) || 'light';
 const savedSidebarState = loadSidebarState();
 const PROMPT_AUTOMATION_STORAGE = 'story_prompt_automation_settings';
 
@@ -134,7 +133,6 @@ const editingProjectId = ref(null);
 const editingProjectName = ref('');
 const activeStageView = ref('brainhole');
 const selectedStoryBlockId = ref('');
-const rightPanelActiveTab = ref('promptControl');
 const showAssistantModal = ref(false);
 const assistantInput = ref('');
 const assistantMessages = ref([]);
@@ -145,6 +143,7 @@ const assistantEditingMessageId = ref(null);
 const assistantEditingMessageContent = ref('');
 const pendingPlotGenerationAvailable = ref(false);
 const activeStandaloneView = ref('');
+const materialExtractorFocusedAsset = ref(null);
 
 const selectedStoryBlock = computed(() => storyBlocks.value.find((block) => block.id === selectedStoryBlockId.value) || null);
 const canCopyCurrentBody = computed(() => storyBlocks.value.some((block) => {
@@ -245,11 +244,111 @@ function pushToast(message, type = 'info') {
 }
 
 function openMaterialExtractor() {
+  materialExtractorFocusedAsset.value = null;
+  activeStandaloneView.value = 'materialExtractor';
+}
+
+function openMaterialExtractorAsset(payload = {}) {
+  const assetType = String(payload.assetType || '').trim();
+  const assetId = String(payload.assetId || '').trim();
+  if (!assetType || !assetId) return;
+  materialExtractorFocusedAsset.value = {
+    assetType,
+    assetId,
+    requestId: Date.now(),
+  };
   activeStandaloneView.value = 'materialExtractor';
 }
 
 function closeMaterialExtractor() {
   activeStandaloneView.value = '';
+  materialExtractorFocusedAsset.value = null;
+}
+
+function buildDnaAssetReferenceEntry(payload = {}, target = 'brainhole') {
+  return {
+    id: `${target}-${payload.assetType || 'asset'}-${payload.assetId || Date.now()}`,
+    target,
+    label: String(payload.label || payload.assetName || payload.assetType || 'DNA资产').trim(),
+    assetType: String(payload.assetType || '').trim(),
+    assetId: String(payload.assetId || '').trim(),
+    assetName: String(payload.assetName || '').trim(),
+    summary: String(payload.summary || '').trim(),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function appendDnaAssetReference(target, payload = {}) {
+  const current = Array.isArray(state.dnaAssetReferences?.[target]) ? state.dnaAssetReferences[target] : [];
+  const assetId = String(payload.assetId || '').trim();
+  const assetType = String(payload.assetType || '').trim();
+  const label = String(payload.label || payload.assetName || payload.assetType || 'DNA资产').trim();
+  const existingIndex = current.findIndex((item) => (
+    assetId
+      ? item.assetId === assetId && item.target === target
+      : item.assetType === assetType && item.label === label && item.target === target
+  ));
+  const nextEntry = buildDnaAssetReferenceEntry(payload, target);
+  const nextList = current.slice();
+
+  if (existingIndex >= 0) {
+    nextList[existingIndex] = {
+      ...nextList[existingIndex],
+      ...nextEntry,
+      createdAt: nextList[existingIndex].createdAt || nextEntry.createdAt,
+    };
+  } else {
+    nextList.unshift(nextEntry);
+  }
+
+  state.dnaAssetReferences = {
+    brainhole: [],
+    guide: [],
+    outline: [],
+    ...(state.dnaAssetReferences || {}),
+    [target]: nextList.slice(0, 12),
+  };
+}
+
+async function applyMaterialAssetContext(payload = {}) {
+  if (!projectLibrary.requireActiveProject()) return;
+
+  const target = String(payload.target || 'brainhole').trim();
+  const label = String(payload.label || payload.assetName || payload.assetType || 'DNA资产').trim();
+  const summary = String(payload.summary || '').trim();
+  const suffix = summary || payload.assetId || payload.assetType || '';
+  const referenceLine = ('【故事DNA参考 · ' + label + '】' + suffix).trim();
+
+  isEditorOpen.value = true;
+  activeStandaloneView.value = '';
+
+  if (target === 'brainhole') {
+    state.storyStart = [state.storyStart, referenceLine].filter(Boolean).join('\n');
+    appendDnaAssetReference('brainhole', payload);
+    updateStage('brainhole');
+    activeStageView.value = 'brainhole';
+    pushToast('已把 DNA 资产写入脑洞参考', 'success');
+  } else if (target === 'guide') {
+    state.architecturePlan = {
+      ...state.architecturePlan,
+      guideReferenceNotes: [state.architecturePlan.guideReferenceNotes, referenceLine].filter(Boolean).join('\n'),
+    };
+    appendDnaAssetReference('guide', payload);
+    updateStage('guide');
+    activeStageView.value = 'guide';
+    pushToast('已把 DNA 资产写入导语参考', 'success');
+  } else {
+    state.architecturePlan = {
+      ...state.architecturePlan,
+      outlineReferenceNotes: [state.architecturePlan.outlineReferenceNotes, referenceLine].filter(Boolean).join('\n'),
+    };
+    appendDnaAssetReference('outline', payload);
+    updateStage('architecture_setup');
+    activeStageView.value = 'architecture_setup';
+    pushToast('已把 DNA 资产写入大纲参考', 'success');
+  }
+
+  await saveCurrentProjectSnapshot();
 }
 
 function setLoading(message = '') {
@@ -721,7 +820,15 @@ const {
   isLatestRegeneratablePlotBlock,
   deletePlotBlock: deletePlotBlockFromState,
   generateBrainhole: generateBrainholeToState,
-  generateGuideAndFirstPlot: generateGuideAndFirstPlotToState,
+  generateGuide: generateGuideToState,
+  updateArchitectureField: updateArchitectureFieldToState,
+  addArchitectureActor: addArchitectureActorToState,
+  removeArchitectureActor: removeArchitectureActorToState,
+  updateArchitectureActorField: updateArchitectureActorFieldToState,
+  generateArchitecture: generateArchitectureToState,
+  confirmArchitecture: confirmArchitectureToState,
+  generatePersona: generatePersonaToState,
+  confirmPersona: confirmPersonaToState,
   generateOptionsForCurrentPlotPoint: generateOptionsForCurrentPlotPointToState,
   generateHooks: generateHooksToState,
   generateBigHooks: generateBigHooksToState,
@@ -752,12 +859,44 @@ async function generateBrainhole() {
   await persistProjectEditAfter(generateBrainholeToState);
 }
 
-async function generateGuideAndFirstPlot() {
-  await persistProjectEditAfter(generateGuideAndFirstPlotToState);
+async function generateGuide() {
+  await persistProjectEditAfter(generateGuideToState);
 }
 
 async function generateOptionsForCurrentPlotPoint() {
   await persistProjectEditAfter(generateOptionsForCurrentPlotPointToState);
+}
+
+function updateArchitectureField(field, value) {
+  updateArchitectureFieldToState(field, value);
+}
+
+function updateArchitectureActorField(index, field, value) {
+  updateArchitectureActorFieldToState(index, field, value);
+}
+
+async function addArchitectureActor() {
+  await persistProjectEditAfter(addArchitectureActorToState);
+}
+
+async function removeArchitectureActor(index) {
+  await persistProjectEditAfter(() => removeArchitectureActorToState(index));
+}
+
+async function generateArchitecture() {
+  await persistProjectEditAfter(generateArchitectureToState);
+}
+
+async function confirmArchitecture() {
+  await persistProjectEditAfter(confirmArchitectureToState);
+}
+
+async function generatePersona() {
+  await persistProjectEditAfter(generatePersonaToState);
+}
+
+async function confirmPersona() {
+  await persistProjectEditAfter(confirmPersonaToState);
 }
 
 async function generateHooks() {
@@ -1230,18 +1369,44 @@ void initializeDatabaseState();
     :active-project-id="activeProjectId"
     :active-project-name="activeProjectName"
     :ai-config="state.aiConfig"
+    :focused-asset="materialExtractorFocusedAsset"
     @close="closeMaterialExtractor"
+    @apply-asset-context="applyMaterialAssetContext"
   />
   <div v-else class="app-shell">
     <header class="app-header">
-      <button class="logo" type="button" title="返回首页" aria-label="返回首页" @click="backToProjectList">
-        <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path v-for="path in ICONS.brain" :key="path" :d="path" />
-        </svg>
-        脑洞组装工坊
-      </button>
-      <StageIndicator v-if="isEditorOpen" :stage="state.stage" :active-stage="activeStageView"
-        @navigate="navigateStageView" />
+      <div class="header-primary">
+        <button class="logo" type="button" title="返回首页" aria-label="返回首页" @click="backToProjectList">
+          <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path v-for="path in ICONS.brain" :key="path" :d="path" />
+          </svg>
+          脑洞组装工坊
+        </button>
+        <div v-if="isEditorOpen" class="header-status-strip" aria-label="当前配置摘要">
+          <div class="header-status-item">
+            <div class="header-status-copy">
+              <span class="header-status-label">项目</span>
+              <span class="header-status-value">{{ activeProjectName }}</span>
+            </div>
+            <button class="header-icon-btn" type="button" title="管理当前项目" aria-label="管理当前项目" @click="showProjectModal = true">
+              <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path v-for="path in ICONS.edit" :key="path" :d="path" />
+              </svg>
+            </button>
+          </div>
+          <div class="header-status-item">
+            <div class="header-status-copy">
+              <span class="header-status-label">模型</span>
+              <span class="header-status-value">{{ state.aiConfig.model || '未设置' }}</span>
+            </div>
+            <button class="header-icon-btn" type="button" title="编辑模型配置" aria-label="编辑模型配置" @click="openApiConfigModal">
+              <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path v-for="path in ICONS.edit" :key="path" :d="path" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="header-actions">
         <button class="btn btn-secondary btn-sm" type="button" @click="openMaterialExtractor">
           素材抽取
@@ -1306,16 +1471,20 @@ void initializeDatabaseState();
     }">
       <EditorLeftPanel
         :is-collapsed="isLeftPanelCollapsed"
-        :ai-config="state.aiConfig"
-        :active-project-name="activeProjectName"
-        :has-active-project="hasActiveProject"
         :story-start="state.storyStart"
         :wind-vane-file="windVaneFile"
         :is-loading="isLoading"
+        :stage="state.stage"
+        :active-stage-view="activeStageView"
+        :dna-asset-references="state.dnaAssetReferences"
+        :dna-result-references="state.dnaResultReferences"
         :file-text-icon-paths="ICONS.fileText"
+        :can-copy-body="canCopyCurrentBody"
+        :prompt-automation-settings="promptAutomationSettings"
+        :copy-selected-choices-with-body="copySelectedChoicesWithBody"
+        :copy-body-preview-text="copyBodyPreviewText"
         @toggle-panel="togglePanel('left')"
-        @open-api-config="openApiConfigModal"
-        @open-project-manager="showProjectModal = true"
+        @navigate-stage="navigateStageView"
         @update:story-start="state.storyStart = $event"
         @choose-wind-vane-file="uploadInputRef?.click()"
         @wind-vane-file-change="handleWindVaneFileChange"
@@ -1325,6 +1494,9 @@ void initializeDatabaseState();
         @clear-wind-vane-file="clearWindVaneFile"
         @clear-brainhole-input="clearBrainholeInput"
         @generate-brainhole="generateBrainhole"
+        @update-prompt-automation-setting="updatePromptAutomationSetting"
+        @copy-body="copyFinalBodyFromSidebar"
+        @update:copy-selected-choices-with-body="copySelectedChoicesWithBody = $event"
       />
 
       <main class="panel panel-center">
@@ -1339,6 +1511,7 @@ void initializeDatabaseState();
         <StoryStageWorkspace
           v-else
           :active-stage-view-label="activeStageViewLabel"
+          :active-stage-view="activeStageView"
           :stage-progress-text="stageLabelFor(state.stage)"
           :active-stage-empty-text="activeStageEmptyText"
           :visible-story-blocks="visibleStoryBlocks"
@@ -1346,6 +1519,11 @@ void initializeDatabaseState();
           :show-current-choice-panel="showCurrentChoicePanel"
           :show-style-panel="showStylePanel"
           :show-final-actions="showFinalActions"
+          :architecture-plan="state.architecturePlan"
+          :brainhole="state.brainhole"
+          :guide="state.guide"
+          :dna-asset-references="state.dnaAssetReferences"
+          :dna-result-references="state.dnaResultReferences"
           :pending-plot-generation-available="pendingPlotGenerationAvailable"
           :pending-choice-generation-available="pendingChoiceGenerationAvailable"
           :pending-choice-generation-label="pendingChoiceGenerationLabel"
@@ -1395,7 +1573,15 @@ void initializeDatabaseState();
           @start-edit-brainhole-option="startEditBrainholeOption"
           @favorite-brainhole-option="favoriteBrainholeOption"
           @delete-brainhole-option="deleteBrainholeOption"
-          @generate-guide-and-first-plot="generateGuideAndFirstPlot"
+          @generate-guide="generateGuide"
+          @generate-architecture="generateArchitecture"
+          @confirm-architecture="confirmArchitecture"
+          @generate-persona="generatePersona"
+          @confirm-persona="confirmPersona"
+          @update-architecture-field="updateArchitectureField"
+          @add-architecture-actor="addArchitectureActor"
+          @remove-architecture-actor="removeArchitectureActor"
+          @update-architecture-actor-field="updateArchitectureActorField"
           @select-choice="handleChoiceSelect"
           @regenerate-current-choices="regenerateCurrentChoices"
           @generate-current-choice-result-variants="handleGenerateCurrentChoiceResultVariants"
@@ -1407,6 +1593,7 @@ void initializeDatabaseState();
           @favorite-current-choice="favoriteCurrentChoice"
           @update:style-input="styleInput = $event"
           @update:custom-prompt-instruction="state.customPromptInstruction = $event"
+          @open-dna-asset="openMaterialExtractorAsset"
           @final-writing="finalWriting"
           @copy-final-work="copyFinalWork"
           @download-final-work="downloadFinalWork"
@@ -1416,16 +1603,29 @@ void initializeDatabaseState();
 
       <EditorRightPanel
         :collapsed="isRightPanelCollapsed"
-        :can-copy-body="canCopyCurrentBody"
-        :active-tab="rightPanelActiveTab"
-        :prompt-automation-settings="promptAutomationSettings"
-        :copy-selected-choices-with-body="copySelectedChoicesWithBody"
-        :copy-body-preview-text="copyBodyPreviewText"
+        :show-current-choice-panel="showCurrentChoicePanel"
+        :pending-plot-generation-available="pendingPlotGenerationAvailable"
+        :pending-choice-generation-available="pendingChoiceGenerationAvailable"
+        :pending-choice-generation-label="pendingChoiceGenerationLabel"
+        :current-choice-title="currentChoiceTitle"
+        :current-choices="currentChoices"
+        :current-choice-type="currentChoiceType"
+        :selected-choice-index="selectedChoiceIndex"
+        :custom-prompt-instruction="state.customPromptInstruction"
+        :dna-result-references="state.dnaResultReferences"
+        :is-loading="isLoading"
         @toggle-collapse="togglePanel('right')"
-        @update:active-tab="rightPanelActiveTab = $event"
-        @update-prompt-automation-setting="updatePromptAutomationSetting"
-        @copy-body="copyFinalBodyFromSidebar"
-        @update:copy-selected-choices-with-body="copySelectedChoicesWithBody = $event"
+        @select-choice="handleChoiceSelect"
+        @regenerate-current-choices="regenerateCurrentChoices"
+        @generate-current-choice-result-variants="handleGenerateCurrentChoiceResultVariants"
+        @continue-pending-plot-generation="continuePendingPlotGeneration"
+        @generate-pending-choices="generatePendingChoices"
+        @update-current-choice-option="updateCurrentChoiceOption"
+        @add-current-choice-option="addCurrentChoiceOption"
+        @delete-current-choice-option="deleteCurrentChoiceOption"
+        @favorite-current-choice="favoriteCurrentChoice"
+        @update:custom-prompt-instruction="state.customPromptInstruction = $event"
+        @open-dna-asset="openMaterialExtractorAsset"
       />
     </div>
 
